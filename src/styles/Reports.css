@@ -1,0 +1,71 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-24);
+  padding: var(--space-24);
+}
+
+.page-header {
+  margin-bottom: var(--space-24);
+}
+
+.page-title {
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--space-8);
+}
+
+.page-subtitle {
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+}
+
+.reports-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-24);
+}
+
+/* Card is already styled globally, just enhancing */
+.reports-content .card {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Report form */
+.reports-content h3 {
+  font-size: var(--font-size-xl);
+  margin-bottom: var(--space-16);
+}
+
+.form-group {
+  margin-bottom: var(--space-16);
+}
+
+.form-label {
+  display: block;
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--space-8);
+}
+
+.form-control {
+  width: 100%;
+}
+
+/* Generate button */
+.reports-content .btn {
+  margin-top: var(--space-12);
+  width: 100%;
+}
+
+/* Responsive */
+@media (min-width: 768px) {
+  .reports-content .card {
+    max-width: 700px;
+  }
+
+  .reports-content .btn {
+    width: auto;
+    padding: var(--space-10) var(--space-20);
+  }
+}

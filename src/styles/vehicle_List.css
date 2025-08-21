@@ -1,0 +1,136 @@
+.vehicle-list-section {
+  margin-bottom: var(--space-32);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-20);
+}
+
+.section-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  margin: 0;
+}
+
+.vehicle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-20);
+}
+
+.vehicles-full-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-24);
+}
+
+.vehicles-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-24);
+}
+
+.vehicles-filters {
+  display: flex;
+  gap: var(--space-12);
+}
+
+.vehicles-view-toggle {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.vehicles-view-toggle .btn {
+  padding: var(--space-8);
+}
+
+.vehicles-view-toggle .btn.active {
+  background: var(--color-primary);
+  color: var(--color-btn-primary-text);
+}
+
+.vehicle-status {
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+}
+
+.vehicle-status.active {
+  background: rgba(var(--color-success-rgb), 0.15);
+  color: var(--color-success);
+  border: 1px solid rgba(var(--color-success-rgb), 0.25);
+}
+
+.vehicle-status.maintenance {
+  background: rgba(var(--color-warning-rgb), 0.15);
+  color: var(--color-warning);
+  border: 1px solid rgba(var(--color-warning-rgb), 0.25);
+}
+
+.vehicle-status.idle {
+  background: rgba(var(--color-info-rgb), 0.15);
+  color: var(--color-info);
+  border: 1px solid rgba(var(--color-info-rgb), 0.25);
+}
+
+.vehicle-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.vehicle-info-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: var(--font-size-sm);
+}
+
+.vehicle-info-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-secondary);
+}
+
+.vehicle-info-label {
+  color: var(--color-text-secondary);
+  min-width: 60px;
+}
+
+.vehicle-info-value {
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}
+
+.vehicle-card-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-12);
+  margin-top: var(--space-16);
+}
+
+.vehicle-metric {
+  text-align: center;
+  padding: var(--space-8);
+  background: var(--color-background);
+  border-radius: var(--radius-base);
+}
+
+.vehicle-metric-value {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.vehicle-metric-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin-top: var(--space-2);
+}

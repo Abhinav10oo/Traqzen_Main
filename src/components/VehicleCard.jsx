@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Fuel, Wrench } from "lucide-react";
+import '../styles/VehicleCard.css';
 
 export default function VehicleCard({ v }) {
   return (
