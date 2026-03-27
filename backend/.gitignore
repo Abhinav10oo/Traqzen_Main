@@ -1,0 +1,46 @@
+# Environment & secrets — never commit these
+.env
+.env.local
+firebase_admin_key.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+.Python
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# SQLite (legacy — no longer used)
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads (legacy — files now go to Firebase Storage)
+uploads/
+
+# Build / packaging
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.sw?
+
+schema.sql
+telematicshub.db

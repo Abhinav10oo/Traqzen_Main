@@ -1,0 +1,63 @@
+"""
+IoT Device Ingestion — No Firebase auth required.
+ESP32 authenticates with a static API key instead.
+
+Endpoint:
+  POST /api/iot/data/{vehicle_id}?key=OBD2_ESP32_KEY
+
+Payload (JSON):
+  { rpm, speed, fuel, temp, engine_load, throttle, intake_air, battery, lat, lng }
+"""
+from fastapi import APIRouter, HTTPException, Query
+from datetime import datetime, timezone
+from core.firebase_admin import db
+from services.alert_service import check_and_create_alerts
+
+router = APIRouter(prefix="/iot", tags=["IoT"])
+
+# Simple static key — ESP32 sends this as ?key=OBD2_ESP32_KEY
+IOT_API_KEY = "OBD2_ESP32_KEY"
+
+
+@router.post("/data/{vehicle_id}", status_code=201)
+def ingest_iot_data(
+    vehicle_id: str,
+    payload: dict,
+    key: str = Query(..., description="API key for IoT devices"),
+):
+    if key != IOT_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid IoT API key")
+
+    ts = datetime.now(timezone.utc).isoformat()
+
+    reading = {
+        "vehicle_id":  vehicle_id,
+        "timestamp":   ts,
+        "lat":         float(payload.get("lat", 0)),
+        "lng":         float(payload.get("lng", 0)),
+        "speed":       float(payload.get("speed", 0)),
+        "fuel":        float(payload.get("fuel", 0)),
+        "temp":        float(payload.get("temp", 0)),
+        "rpm":         int(payload.get("rpm", 0)),
+        "engine_load": int(payload.get("engine_load", 0)),
+        "throttle":    int(payload.get("throttle", 0)),
+        "intake_air":  int(payload.get("intake_air", 0)),
+        "battery":     float(payload.get("battery", 0.0)),
+    }
+
+    # Save reading to sensor_data subcollection
+    db.collection("sensor_data").document(vehicle_id).collection("readings").add(reading)
+
+    # Update vehicle document with live status (creates it if missing)
+    db.collection("vehicles").document(vehicle_id).set({
+        "name":         "Hyundai Venue",
+        "vehicle_id":   vehicle_id,
+        "status":       "active" if reading["speed"] > 2 else "idle",
+        "last_seen":    ts,
+        "last_reading": reading,
+    }, merge=True)
+
+    # Run alert threshold checks
+    check_and_create_alerts(vehicle_id, reading)
+
+    return {"status": "ok", "vehicle_id": vehicle_id, "timestamp": ts}

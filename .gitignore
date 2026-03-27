@@ -1,0 +1,12 @@
+backend/.env
+backend/firebase_admin_key.json
+backend/venv/
+backend/__pycache__/
+backend/*.db
+backend/schema.sql
+backend/uploads/
+telematicshub/.env
+telematicshub/node_modules/
+telematicshub/dist/
+.DS_Store
+Thumbs.db
