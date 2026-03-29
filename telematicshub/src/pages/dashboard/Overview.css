@@ -7,6 +7,12 @@
   50%       { opacity: 0.4; transform: scale(1.5); }
 }
 
+/* Alcohol danger flash */
+@keyframes alcoholFlash {
+  0%, 100% { border-color: rgba(231,76,60,0.7); background: rgba(231,76,60,0.18); }
+  50%       { border-color: rgba(231,76,60,1);   background: rgba(231,76,60,0.30); }
+}
+
 /* Demo banner */
 .demo-banner {
   display: flex;

@@ -45,12 +45,19 @@ export function AuthProvider({ children }) {
   // Sign in with email + password
   async function login(email, password) {
     const cred = await signInWithEmailAndPassword(auth, email, password);
-    const snap = await getDoc(doc(db, 'users', cred.user.uid));
-    const profile = snap.exists() ? snap.data() : {};
-    const role = profile.role || 'owner';
-    setUserRole(role);
-    setUserProfile(profile);
-    return { user: cred.user, role };
+    try {
+      const snap = await getDoc(doc(db, 'users', cred.user.uid));
+      const profile = snap.exists() ? snap.data() : {};
+      const role = profile.role || 'owner';
+      setUserRole(role);
+      setUserProfile(profile);
+      return { user: cred.user, role };
+    } catch {
+      // Profile fetch failed (Firestore rules) — login still succeeds
+      setUserRole('owner');
+      setUserProfile(null);
+      return { user: cred.user, role: 'owner' };
+    }
   }
 
   // Create account + save profile to Firestore
@@ -58,7 +65,11 @@ export function AuthProvider({ children }) {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     const name = `${firstName} ${lastName}`.trim();
     const profile = { firstName, lastName, name, email, phone, role, createdAt: serverTimestamp() };
-    await setDoc(doc(db, 'users', cred.user.uid), profile);
+    try {
+      await setDoc(doc(db, 'users', cred.user.uid), profile);
+    } catch {
+      // Firestore rules blocked profile save — auth still succeeded
+    }
     setUserRole(role);
     setUserProfile(profile);
     return cred.user;

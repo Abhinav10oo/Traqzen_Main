@@ -79,7 +79,11 @@ export default function Sidebar({ open, view }) {
         {/* Bottom user info */}
         <div className="sidebar-footer">
           <div className="sidebar-user">
-            <div className="sidebar-avatar">{initials}</div>
+            <div className="sidebar-avatar" style={{overflow:'hidden',padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                {userProfile?.photoURL
+                  ? <img src={userProfile.photoURL} alt="avatar" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:'50%'}} />
+                  : initials}
+              </div>
             <div className="sidebar-user-info">
               <div className="sidebar-user-name">{displayName}</div>
               <div className="sidebar-user-role">{view === 'owner' ? 'Fleet Owner' : 'Driver'}</div>

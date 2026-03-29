@@ -4,7 +4,7 @@
 // Dashboard pages use: const { vehicles, alerts, liveTs, ... } = useData()
 
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { seedFirestore } from '../utils/seedFirestore';
 import { startLiveSimulation } from '../utils/liveSimulator';
@@ -34,9 +34,10 @@ export function DataProvider({ children }) {
   const stopSimRef = useRef(null);
 
   useEffect(() => {
+    let alertsUnsub = null;
+
     async function load() {
       if (DEMO_MODE) {
-        // Skip Firestore — fakeData is already set as initial state
         setDataLoading(false);
         return;
       }
@@ -46,10 +47,9 @@ export function DataProvider({ children }) {
         if (snap.empty) await seedFirestore();
 
         const [
-          vData, aData, dData, mData, docData, tData, ftData, tdData, sdData,
+          vData, dData, mData, docData, tData, ftData, tdData, sdData,
         ] = await Promise.all([
           fetchCollection('vehicles'),
-          fetchCollection('alerts'),
           fetchCollection('drivers'),
           fetchCollection('maintenance'),
           fetchCollection('documents'),
@@ -61,7 +61,6 @@ export function DataProvider({ children }) {
 
         const realVehicles = vData.filter(v => (v._docId || v.id) === 'mritunjay');
         setVehicles(realVehicles.length ? realVehicles : fake.vehicles);
-        if (aData.length)   setAlerts(aData);
         if (dData.length)   setDrivers(dData);
         if (mData.length)   setMaintenance(mData);
         if (docData.length) setDocuments(docData);
@@ -69,6 +68,16 @@ export function DataProvider({ children }) {
         if (ftData.length)  setFuelTrend(ftData);
         if (tdData.length)  setTripData(tdData);
         if (sdData.length)  setSpeedData(sdData);
+
+        // Real-time alerts listener — picks up alcohol/engine/fuel alerts instantly
+        alertsUnsub = onSnapshot(
+          query(collection(db, 'alerts'), orderBy('created_at', 'desc'), limit(50)),
+          (aSnap) => {
+            const aData = aSnap.docs.map(d => ({ ...d.data(), _docId: d.id, id: d.id }));
+            setAlerts(aData.length ? aData : fake.alerts);
+          },
+          (err) => console.warn('Alerts listener error:', err.message)
+        );
       } catch (err) {
         console.warn('Firestore unavailable, using local demo data:', err.message);
       } finally {
@@ -78,7 +87,6 @@ export function DataProvider({ children }) {
 
     load().then(() => {
       if (DEMO_MODE) {
-        // Only run the live simulator in demo mode
         stopSimRef.current = startLiveSimulation(
           setVehicles,
           setAlerts,
@@ -91,6 +99,7 @@ export function DataProvider({ children }) {
 
     return () => {
       if (stopSimRef.current) stopSimRef.current();
+      if (alertsUnsub) alertsUnsub();
     };
   }, []);
 

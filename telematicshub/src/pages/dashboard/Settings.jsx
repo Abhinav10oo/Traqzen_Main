@@ -1,20 +1,60 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { uploadToCloudinary } from '../../utils/cloudinary';
 
 export default function Settings() {
   const { view } = useOutletContext();
   const isOwner = view === 'owner';
   const [activeTab, setActiveTab] = useState('profile');
-  const { userProfile } = useAuth();
+  const { userProfile, updateProfile } = useAuth();
 
   const initials = userProfile?.name
     ? userProfile.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : 'U';
-  const displayName = userProfile?.name || 'User';
+  const displayName = userProfile?.name || '';
   const displayEmail = userProfile?.email || '';
   const displayPhone = userProfile?.phone || '';
   const displayRole = userProfile?.role === 'owner' ? 'Fleet Owner' : userProfile?.role === 'driver' ? 'Driver' : '';
+
+  const [profileForm, setProfileForm] = useState({
+    name:  displayName,
+    phone: displayPhone,
+  });
+  const [saveStatus,   setSaveStatus]   = useState('');
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoPreview,   setPhotoPreview]   = useState(userProfile?.photoURL || null);
+  const photoInputRef = useRef(null);
+
+  const [photoError, setPhotoError] = useState('');
+
+  const handlePhotoChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setPhotoUploading(true);
+    setPhotoError('');
+    try {
+      const { url } = await uploadToCloudinary(file, 'telematicshub/profiles');
+      setPhotoPreview(url);
+      await updateProfile({ photoURL: url });
+    } catch (err) {
+      setPhotoError(err.message);
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
+
+  const handleProfileSave = async () => {
+    setSaveStatus('saving');
+    try {
+      await updateProfile({ name: profileForm.name, phone: profileForm.phone });
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus(''), 2500);
+    } catch {
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus(''), 2500);
+    }
+  };
 
   const tabs = [
     { key: 'profile',  label: 'Profile' },
@@ -51,26 +91,47 @@ export default function Settings() {
             <div className="card">
               <div className="section-title">Profile Information</div>
               <div style={{display:'flex',alignItems:'center',gap:'20px',marginBottom:'28px'}}>
-                <div style={{width:70,height:70,borderRadius:'50%',background:'linear-gradient(135deg,var(--primary),var(--dark))',color:'white',fontSize:'1.5rem',fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',border:'3px solid rgba(42,142,158,0.3)'}}>
-                  {userProfile?.photoURL
-                    ? <img src={userProfile.photoURL} alt="avatar" style={{width:'100%',height:'100%',borderRadius:'50%',objectFit:'cover'}} />
-                    : initials}
+                <div style={{position:'relative',width:70,height:70,flexShrink:0}}>
+                  <div style={{width:70,height:70,borderRadius:'50%',background:'linear-gradient(135deg,var(--primary),var(--dark))',color:'white',fontSize:'1.5rem',fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',border:'3px solid rgba(42,142,158,0.3)',overflow:'hidden'}}>
+                    {photoPreview
+                      ? <img src={photoPreview} alt="avatar" style={{width:'100%',height:'100%',objectFit:'cover'}} />
+                      : initials}
+                  </div>
+                  {photoUploading && (
+                    <div style={{position:'absolute',inset:0,borderRadius:'50%',background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.7rem',color:'white'}}>...</div>
+                  )}
                 </div>
                 <div>
-                  <div style={{fontWeight:700,color:'var(--white)',fontSize:'1.1rem'}}>{displayName}</div>
+                  <div style={{fontWeight:700,color:'var(--white)',fontSize:'1.1rem'}}>{profileForm.name || displayName}</div>
                   <div style={{color:'var(--primary-light)',fontSize:'0.82rem'}}>{displayRole}</div>
-                  <button className="btn btn-ghost btn-xs" style={{marginTop:'8px'}}>Change Photo</button>
+                  <input ref={photoInputRef} type="file" accept="image/*" style={{display:'none'}} onChange={handlePhotoChange} />
+                  <button className="btn btn-ghost btn-xs" style={{marginTop:'8px'}} onClick={() => photoInputRef.current?.click()} disabled={photoUploading}>
+                    {photoUploading ? 'Uploading...' : 'Change Photo'}
+                  </button>
+                  {photoError && <div style={{fontSize:'0.72rem',color:'#e74c3c',marginTop:4,maxWidth:200}}>{photoError}</div>}
                 </div>
               </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px'}}>
-                <div className="form-group"><label>Full Name</label><input type="text" defaultValue={displayName} /></div>
-                <div className="form-group"><label>Email</label><input type="email" defaultValue={displayEmail} /></div>
-                <div className="form-group"><label>Phone</label><input type="tel" defaultValue={displayPhone} /></div>
-                <div className="form-group"><label>Role</label><input type="text" defaultValue={displayRole} disabled style={{opacity:0.5}} /></div>
+                <div className="form-group">
+                  <label>Full Name</label>
+                  <input type="text" value={profileForm.name}
+                    onChange={e => setProfileForm(f => ({ ...f, name: e.target.value }))} />
+                </div>
+                <div className="form-group"><label>Email</label><input type="email" value={displayEmail} disabled style={{opacity:0.5}} /></div>
+                <div className="form-group">
+                  <label>Phone</label>
+                  <input type="tel" value={profileForm.phone}
+                    onChange={e => setProfileForm(f => ({ ...f, phone: e.target.value }))} />
+                </div>
+                <div className="form-group"><label>Role</label><input type="text" value={displayRole} disabled style={{opacity:0.5}} /></div>
               </div>
-              <div style={{display:'flex',gap:'10px',marginTop:'20px',paddingTop:'16px',borderTop:'1px solid rgba(42,142,158,0.1)'}}>
-                <button className="btn btn-primary btn-sm">Save Changes</button>
-                <button className="btn btn-ghost btn-sm">Cancel</button>
+              <div style={{display:'flex',gap:'10px',alignItems:'center',marginTop:'20px',paddingTop:'16px',borderTop:'1px solid rgba(42,142,158,0.1)'}}>
+                <button className="btn btn-primary btn-sm" onClick={handleProfileSave} disabled={saveStatus==='saving'}>
+                  {saveStatus === 'saving' ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setProfileForm({ name: displayName, phone: displayPhone })}>Cancel</button>
+                {saveStatus === 'saved' && <span style={{color:'#27ae60',fontSize:'0.82rem'}}>✓ Profile updated</span>}
+                {saveStatus === 'error' && <span style={{color:'#e74c3c',fontSize:'0.82rem'}}>Failed — check Firestore rules</span>}
               </div>
             </div>
           )}

@@ -23,15 +23,22 @@ function LiveOBDPanel() {
         const d = snap.data();
         const r = d.last_reading || {};
         setObd({
-          rpm:         r.rpm         ?? 0,
-          speed:       r.speed       ?? 0,
-          temp:        r.temp        ?? 0,
-          fuel:        r.fuel        ?? 0,
-          engine_load: r.engine_load ?? 0,
-          throttle:    r.throttle    ?? 0,
-          intake_air:  r.intake_air  ?? 0,
-          battery:     r.battery     ?? 0,
-          status:      d.status      ?? 'offline',
+          rpm:           r.rpm           ?? 0,
+          speed:         r.speed         ?? 0,
+          temp:          r.temp          ?? 0,
+          fuel:          r.fuel          ?? 0,
+          engine_load:   r.engine_load   ?? 0,
+          throttle:      r.throttle      ?? 0,
+          intake_air:    r.intake_air    ?? 0,
+          battery:       r.battery       ?? 0,
+          alcohol_level: r.alcohol_level ?? 0,
+          mq3_voltage:   r.mq3_voltage   ?? 0,
+          gps_valid:     r.gps_valid     ?? false,
+          latitude:      r.lat           ?? 0,
+          longitude:     r.lng           ?? 0,
+          altitude:      r.altitude      ?? 0,
+          satellites:    r.satellites    ?? 0,
+          status:        d.status        ?? 'offline',
         });
         setLastSeen(new Date());
         setOnline(true);
@@ -56,15 +63,21 @@ function LiveOBDPanel() {
   const tempColor = (v) => v < 60 ? '#3ab5c8' : v <= 100 ? '#27ae60' : v <= 110 ? '#f39c12' : '#e74c3c';
   const batColor  = (v) => v < 11.5 ? '#e74c3c' : v < 12.4 ? '#f39c12' : v > 14.8 ? '#f39c12' : '#27ae60';
 
+  const alcoholLabel = (lvl) => ['Sober','Trace','Moderate','High'][lvl] || 'Unknown';
+  const alcoholColor = (lvl) => ['#27ae60','#f39c12','#f97316','#e74c3c'][lvl] || '#64748b';
+
   const metrics = obd ? [
-    { label: 'RPM',         value: obd.rpm,                      unit: 'rpm', color: rpmColor(obd.rpm),   bar: (obd.rpm / 8000) * 100 },
-    { label: 'Speed',       value: obd.speed,                    unit: 'km/h', color: spdColor(obd.speed), bar: (obd.speed / 200) * 100 },
-    { label: 'Coolant Temp',value: obd.temp,                     unit: '°C',  color: tempColor(obd.temp), bar: null },
-    { label: 'Engine Load', value: obd.engine_load,              unit: '%',   color: '#a855f7',           bar: obd.engine_load },
-    { label: 'Throttle',    value: obd.throttle,                 unit: '%',   color: '#f97316',           bar: obd.throttle },
-    { label: 'Intake Air',  value: obd.intake_air,               unit: '°C',  color: '#06b6d4',           bar: null },
-    { label: 'Fuel',        value: Math.round(obd.fuel),         unit: '%',   color: obd.fuel < 15 ? '#e74c3c' : '#eab308', bar: obd.fuel },
-    { label: 'Battery',     value: Number(obd.battery).toFixed(1), unit: 'V', color: batColor(obd.battery), bar: null },
+    { label: 'RPM',         value: obd.rpm,                        unit: 'rpm',  color: rpmColor(obd.rpm),     bar: (obd.rpm / 8000) * 100 },
+    { label: 'Speed',       value: obd.speed,                      unit: 'km/h', color: spdColor(obd.speed),   bar: (obd.speed / 200) * 100 },
+    { label: 'Coolant Temp',value: obd.temp,                       unit: '°C',   color: tempColor(obd.temp),   bar: null },
+    { label: 'Engine Load', value: obd.engine_load,                unit: '%',    color: '#a855f7',             bar: obd.engine_load },
+    { label: 'Intake Air',  value: obd.intake_air,                 unit: '°C',   color: '#06b6d4',             bar: null },
+    { label: 'Fuel',        value: Math.round(obd.fuel),           unit: '%',    color: obd.fuel < 15 ? '#e74c3c' : '#eab308', bar: obd.fuel },
+    { label: 'Battery',     value: Number(obd.battery).toFixed(1), unit: 'V',    color: batColor(obd.battery), bar: null },
+    { label: 'Alcohol',     value: alcoholLabel(obd.alcohol_level), unit: `(${obd.mq3_voltage?.toFixed(2)}V)`, color: alcoholColor(obd.alcohol_level), bar: null },
+    { label: 'GPS',         value: obd.gps_valid ? `${Number(obd.latitude).toFixed(4)}, ${Number(obd.longitude).toFixed(4)}` : 'No Fix',
+                            unit: obd.gps_valid ? `${obd.satellites} sats · ${Number(obd.altitude).toFixed(0)}m` : 'Waiting…',
+                            color: obd.gps_valid ? '#27ae60' : '#64748b', bar: null },
   ] : [];
 
   return (
@@ -123,7 +136,112 @@ function LiveOBDPanel() {
         </div>
       </div>
 
-      {/* 8 metric tiles */}
+      {/* ── Alcohol Alert Banner ── */}
+      {online && obd && obd.alcohol_level >= 2 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+          background: obd.alcohol_level >= 3
+            ? 'rgba(231,76,60,0.18)'
+            : 'rgba(249,115,22,0.15)',
+          border: obd.alcohol_level >= 3
+            ? '2px solid rgba(231,76,60,0.7)'
+            : '2px solid rgba(249,115,22,0.6)',
+          borderRadius: 12,
+          padding: '14px 18px',
+          marginBottom: 14,
+          animation: obd.alcohol_level >= 3 ? 'alcoholFlash 1s ease-in-out infinite' : 'none',
+        }}>
+          <span style={{ fontSize: '2rem', flexShrink: 0 }}>
+            {obd.alcohol_level >= 3 ? '🚨' : '⚠️'}
+          </span>
+          <div style={{ flex: 1 }}>
+            <div style={{
+              fontWeight: 800,
+              fontSize: '1rem',
+              color: obd.alcohol_level >= 3 ? '#ff6b6b' : '#f97316',
+              letterSpacing: '0.03em',
+            }}>
+              {obd.alcohol_level >= 3
+                ? 'DANGER — HIGH ALCOHOL DETECTED'
+                : 'WARNING — MODERATE ALCOHOL DETECTED'}
+            </div>
+            <div style={{ fontSize: '0.8rem', color: '#cbd5e1', marginTop: 3 }}>
+              {obd.alcohol_level >= 3
+                ? 'Driver may be severely impaired. Stop the vehicle immediately!'
+                : 'Alcohol traces detected. Driver fitness should be verified.'}
+              <span style={{
+                marginLeft: 12,
+                fontSize: '0.75rem',
+                color: '#94a3b8',
+              }}>
+                MQ-3 sensor: {obd.mq3_voltage?.toFixed(2)}V · Level {obd.alcohol_level}/3
+              </span>
+            </div>
+          </div>
+          <div style={{
+            background: obd.alcohol_level >= 3 ? 'rgba(231,76,60,0.25)' : 'rgba(249,115,22,0.2)',
+            border: obd.alcohol_level >= 3 ? '1px solid rgba(231,76,60,0.5)' : '1px solid rgba(249,115,22,0.4)',
+            borderRadius: 8,
+            padding: '6px 14px',
+            fontSize: '0.75rem',
+            fontWeight: 700,
+            color: obd.alcohol_level >= 3 ? '#ff6b6b' : '#f97316',
+            flexShrink: 0,
+          }}>
+            {['Sober','Trace','Moderate','High'][obd.alcohol_level]}
+          </div>
+        </div>
+      )}
+
+      {/* ── GPS Banner (when valid fix) ── */}
+      {online && obd && obd.gps_valid && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          background: 'rgba(39,174,96,0.08)',
+          border: '1px solid rgba(39,174,96,0.25)',
+          borderRadius: 10,
+          padding: '10px 16px',
+          marginBottom: 14,
+          fontSize: '0.8rem',
+          color: '#94a3b8',
+        }}>
+          <span style={{ fontSize: '1.2rem' }}>📍</span>
+          <div style={{ flex: 1 }}>
+            <span style={{ color: '#27ae60', fontWeight: 600 }}>GPS Fix</span>
+            {' · '}
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {Number(obd.latitude).toFixed(6)}, {Number(obd.longitude).toFixed(6)}
+            </span>
+            <span style={{ marginLeft: 10, color: '#64748b' }}>
+              {obd.satellites} satellites · {Number(obd.altitude).toFixed(0)}m alt
+            </span>
+          </div>
+          <a
+            href={`https://www.google.com/maps?q=${obd.latitude},${obd.longitude}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              background: 'rgba(39,174,96,0.15)',
+              border: '1px solid rgba(39,174,96,0.35)',
+              borderRadius: 6,
+              padding: '4px 12px',
+              color: '#27ae60',
+              fontWeight: 600,
+              fontSize: '0.75rem',
+              textDecoration: 'none',
+              flexShrink: 0,
+            }}
+          >
+            Open Map ↗
+          </a>
+        </div>
+      )}
+
+      {/* metric tiles */}
       {online && obd ? (
         <div style={{
           display: 'grid',
@@ -217,7 +335,7 @@ export default function Overview() {
   const { vehicles, alerts, fuelTrend, tripData, recentTrips, liveTs } = useData();
 
   const activeCount      = vehicles.filter(v => v.status === 'active').length;
-  const alertCount       = alerts.filter(a => !a.resolved).length;
+  const alertCount       = alerts.filter(a => a.resolved !== true).length;
   const maintenanceCount = vehicles.filter(v => v.status === 'maintenance').length;
   const offlineCount     = vehicles.filter(v => v.status === 'offline').length;
 
@@ -302,7 +420,7 @@ export default function Overview() {
               </div>
               {/* Odometer */}
               <div style={{ marginTop: 8, fontSize: '0.72rem', color: '#94aab0', textAlign: 'right' }}>
-                ODO: {v.odometer.toLocaleString()} km
+                ODO: {(v.odometer || 0).toLocaleString()} km
               </div>
             </div>
           );
@@ -447,13 +565,19 @@ export default function Overview() {
             <span className="badge badge-danger">{alertCount}</span>
           </div>
           <div className="alert-list">
-            {alerts.filter(a => !a.resolved).map(a => (
+            {alerts.filter(a => a.resolved !== true).map(a => (
               <div key={a.id} className={`alert-item alert-${a.severity}`}>
                 <div className="alert-dot" style={{background: severityColor[a.severity]}} />
                 <div className="alert-content">
-                  <div className="alert-type">{a.type}</div>
+                  <div className="alert-type">{a.alert_type || a.type}</div>
                   <div className="alert-msg">{a.message}</div>
-                  <div className="alert-meta">{a.vehicleReg} · {a.time}</div>
+                  <div className="alert-meta">
+                    {a.vehicle_id || a.vehicleReg}
+                    {' · '}
+                    {a.created_at
+                      ? new Date(a.created_at).toLocaleTimeString()
+                      : a.time}
+                  </div>
                 </div>
               </div>
             ))}

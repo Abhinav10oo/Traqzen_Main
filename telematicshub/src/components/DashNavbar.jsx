@@ -100,7 +100,11 @@ export default function DashNavbar({ sidebarOpen, setSidebarOpen, view }) {
         {/* Profile dropdown */}
         <div className="nav-dropdown-wrap" ref={profileRef}>
           <button className="nav-avatar-btn" onClick={() => setProfileOpen(!profileOpen)}>
-            <div className="avatar">{initials}</div>
+            <div className="avatar" style={{overflow:'hidden',padding:0}}>
+              {userProfile?.photoURL
+                ? <img src={userProfile.photoURL} alt="avatar" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:'50%'}} />
+                : initials}
+            </div>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="6 9 12 15 18 9"/>
             </svg>
@@ -108,7 +112,11 @@ export default function DashNavbar({ sidebarOpen, setSidebarOpen, view }) {
           {profileOpen && (
             <div className="nav-dropdown profile-dropdown">
               <div className="profile-header">
-                <div className="avatar lg">{initials}</div>
+                <div className="avatar lg" style={{overflow:'hidden',padding:0}}>
+                  {userProfile?.photoURL
+                    ? <img src={userProfile.photoURL} alt="avatar" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:'50%'}} />
+                    : initials}
+                </div>
                 <div>
                   <div className="profile-name">{userProfile?.name || 'User'}</div>
                   <div className="profile-role">{view === 'owner' ? 'Fleet Owner' : 'Driver'}</div>

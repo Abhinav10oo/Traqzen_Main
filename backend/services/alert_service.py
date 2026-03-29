@@ -67,6 +67,20 @@ def check_and_create_alerts(vehicle_id: str, reading: dict):
             f"Speed limit exceeded: {speed:.0f} km/h (limit: {settings.SPEED_LIMIT} km/h)"
         )
 
+    # ── Alcohol Detected ──────────────────────────────────────────────────────
+    alcohol = reading.get("alcohol_level")
+    if alcohol is not None:
+        if alcohol == 3:
+            _create_alert(
+                vehicle_id, "alcohol_high", "danger",
+                f"HIGH alcohol detected (level {alcohol}/3) — driver may be impaired!"
+            )
+        elif alcohol == 2:
+            _create_alert(
+                vehicle_id, "alcohol_moderate", "warning",
+                f"Moderate alcohol detected (level {alcohol}/3) — please verify driver condition"
+            )
+
 
 def check_document_expiry_alerts():
     """

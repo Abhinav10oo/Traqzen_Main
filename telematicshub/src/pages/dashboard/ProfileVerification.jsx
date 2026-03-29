@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { doc, updateDoc } from 'firebase/firestore';
-import { storage, db } from '../../firebase';
+import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
+import { uploadToCloudinary } from '../../utils/cloudinary';
 import './ProfileVerification.css';
 
 const ID_DOC_TYPES = [
@@ -110,12 +110,10 @@ export default function ProfileVerification() {
     setPhotoUploading(true);
     setPhotoMsg('');
     try {
-      const storageRef = ref(storage, `profile_photos/${currentUser.uid}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
+      const { url } = await uploadToCloudinary(file, 'telematicshub/profiles');
       await updateProfile({ photoURL: url });
       setPhotoMsg('saved');
-    } catch (err) {
+    } catch {
       setPhotoMsg('error');
     } finally {
       setPhotoUploading(false);
@@ -129,10 +127,7 @@ export default function ProfileVerification() {
     setDocUploading(prev => ({ ...prev, [docKey]: true }));
     setDocMsg(prev => ({ ...prev, [docKey]: '' }));
     try {
-      const storagePath = `verification_docs/${currentUser.uid}/${docKey}`;
-      const storageRef = ref(storage, storagePath);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
+      const { url } = await uploadToCloudinary(file, `telematicshub/verification/${currentUser.uid}`);
 
       const docEntry = {
         url,

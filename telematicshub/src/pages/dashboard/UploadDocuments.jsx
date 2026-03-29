@@ -1,10 +1,10 @@
 import { useState, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { storage, db } from '../../firebase';
+import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
+import { uploadToCloudinary } from '../../utils/cloudinary';
 import './UploadDocuments.css';
 
 export default function UploadDocuments() {
@@ -17,8 +17,9 @@ export default function UploadDocuments() {
   const [files, setFiles] = useState([]);
   const [form, setForm] = useState({ vehicle: '', docType: '', issuer: '', issueDate: '', expiryDate: '' });
   const [uploaded, setUploaded] = useState([]);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState('');
+  const [uploading,  setUploading]  = useState(false);
+  const [progress,   setProgress]   = useState(0);
+  const [error,      setError]      = useState('');
 
   if (!isOwner) {
     return (
@@ -58,14 +59,16 @@ export default function UploadDocuments() {
     try {
       const downloadURLs = [];
 
-      // Upload each file to Firebase Storage
-      for (const file of files) {
-        const storagePath = `documents/${form.vehicle}/${form.docType}/${Date.now()}_${file.name}`;
-        const storageRef = ref(storage, storagePath);
-        await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(storageRef);
+      // Upload each file to Cloudinary
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const folder = `telematicshub/documents/${form.vehicle}`;
+        const { url } = await uploadToCloudinary(file, folder, (pct) => {
+          setProgress(Math.round(((i / files.length) + pct / 100 / files.length) * 100));
+        });
         downloadURLs.push({ name: file.name, url });
       }
+      setProgress(100);
 
       // Save metadata to Firestore
       const docData = {
@@ -90,9 +93,11 @@ export default function UploadDocuments() {
       };
       setUploaded(prev => [entry, ...prev]);
       setFiles([]);
+      setProgress(0);
       setForm({ vehicle:'', docType:'', issuer:'', issueDate:'', expiryDate:'' });
     } catch (err) {
       setError('Upload failed: ' + err.message);
+      setProgress(0);
     } finally {
       setUploading(false);
     }
@@ -201,9 +206,20 @@ export default function UploadDocuments() {
             </div>
           )}
 
+          {uploading && (
+            <div style={{marginBottom:'12px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:'0.8rem',color:'var(--mid-gray)',marginBottom:4}}>
+                <span>Uploading to Cloudinary...</span>
+                <span>{progress}%</span>
+              </div>
+              <div style={{height:6,background:'rgba(255,255,255,0.06)',borderRadius:3,overflow:'hidden'}}>
+                <div style={{height:'100%',width:`${progress}%`,background:'var(--primary)',borderRadius:3,transition:'width 0.3s ease'}} />
+              </div>
+            </div>
+          )}
           <div style={{display:'flex',gap:'10px'}}>
             <button type="submit" className="btn btn-primary" disabled={uploading}>
-              {uploading ? '⏳ Uploading…' : '📤 Upload Document'}
+              {uploading ? `⏳ Uploading ${progress}%…` : '📤 Upload Document'}
             </button>
             <button type="reset" className="btn btn-ghost" disabled={uploading} onClick={()=>{setFiles([]);setForm({vehicle:'',docType:'',issuer:'',issueDate:'',expiryDate:''});setError('');}}>
               Clear

@@ -79,10 +79,17 @@ function VehicleDetailModal({ vehicle, onClose, isOwner }) {
                 {[
                   { label:'RPM',         value: vehicle.rpm ?? 0,         unit:'rpm',  color: (vehicle.rpm??0)<3000?'#27ae60':(vehicle.rpm??0)<6000?'#f39c12':'#e74c3c' },
                   { label:'Engine Load', value: vehicle.engine_load ?? 0, unit:'%',    color:'#a855f7' },
-                  { label:'Throttle',    value: vehicle.throttle ?? 0,    unit:'%',    color:'#f97316' },
                   { label:'Intake Air',  value: vehicle.intake_air ?? 0,  unit:'°C',   color:'#06b6d4' },
                   { label:'Battery',     value: Number(vehicle.battery??0).toFixed(1), unit:'V', color:'#14b8a6' },
                   { label:'Speed',       value: vehicle.speed ?? 0,       unit:'km/h', color:'#3b82f6' },
+                  { label:'Alcohol',
+                    value: ['Sober','Trace','Moderate','High'][vehicle.alcohol_level??0] ?? 'Sober',
+                    unit: `${Number(vehicle.mq3_voltage??0).toFixed(2)}V`,
+                    color: [vehicle.alcohol_level??0][0]===0?'#27ae60':[vehicle.alcohol_level??0][0]===1?'#f39c12':[vehicle.alcohol_level??0][0]===2?'#f97316':'#e74c3c' },
+                  { label:'GPS',
+                    value: vehicle.gps_valid ? `${Number(vehicle.lat??0).toFixed(4)}` : 'No Fix',
+                    unit: vehicle.gps_valid ? `${Number(vehicle.lng??0).toFixed(4)} · ${vehicle.satellites??0} sats` : 'Waiting…',
+                    color: vehicle.gps_valid ? '#27ae60' : '#64748b' },
                 ].map((m,i) => (
                   <div key={i} style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)',borderRadius:10,padding:'10px 12px',textAlign:'center'}}>
                     <div style={{fontSize:'0.62rem',color:'#64748b',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:4}}>{m.label}</div>
@@ -158,17 +165,22 @@ export default function VehicleList() {
         const d = snap.data();
         const r = d.last_reading || {};
         setLiveOBD({
-          status:      d.status ?? 'idle',
-          speed:       Math.round(r.speed       ?? 0),
-          fuel:        Math.round(r.fuel        ?? 0),
-          temp:        Math.round(r.temp        ?? 0),
-          rpm:         Math.round(r.rpm         ?? 0),
-          engine_load: Math.round(r.engine_load ?? 0),
-          throttle:    Math.round(r.throttle    ?? 0),
-          intake_air:  Math.round(r.intake_air  ?? 0),
-          battery:     r.battery ?? 0,
-          lat:         r.lat ?? 0,
-          lng:         r.lng ?? 0,
+          status:        d.status         ?? 'idle',
+          speed:         Math.round(r.speed       ?? 0),
+          fuel:          Math.round(r.fuel        ?? 0),
+          temp:          Math.round(r.temp        ?? 0),
+          rpm:           Math.round(r.rpm         ?? 0),
+          engine_load:   Math.round(r.engine_load ?? 0),
+          throttle:      Math.round(r.throttle    ?? 0),
+          intake_air:    Math.round(r.intake_air  ?? 0),
+          battery:       r.battery       ?? 0,
+          lat:           r.lat           ?? 0,
+          lng:           r.lng           ?? 0,
+          alcohol_level: r.alcohol_level ?? 0,
+          mq3_voltage:   r.mq3_voltage   ?? 0,
+          gps_valid:     r.gps_valid     ?? false,
+          altitude:      r.altitude      ?? 0,
+          satellites:    r.satellites    ?? 0,
         });
       }
     });
