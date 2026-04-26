@@ -1,12 +1,47 @@
+# ── Secrets & Environment ─────────────────────────────────────────────────────
 backend/.env
 backend/firebase_admin_key.json
+*.env
+*.env.local
+
+# ── Python ────────────────────────────────────────────────────────────────────
 backend/venv/
-backend/__pycache__/
-backend/*.db
+backend/.venv/
+.venv/
+venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+*.db
 backend/schema.sql
 backend/uploads/
+
+# ── Test / Scratch files ──────────────────────────────────────────────────────
+backend/test_sms.py
+test_api.py
+randomfile.md
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
 telematicshub/.env
 telematicshub/node_modules/
 telematicshub/dist/
+
+# ── IDE & Local Tools ─────────────────────────────────────────────────────────
+.vscode/
+.claude/
+.venv/
+venv/
+
+# ── OS ───────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# ── Binary / Large files ──────────────────────────────────────────────────────
+*.docx
+*.pdf
+
+# ── Project-specific ignores ─────────────────────────────────────────────────
+AAAA IOT diagram/
+IoT Screenshot/
+IoT_PROJECT_DOCUMENTATION.md
+IoT_project_todo.md

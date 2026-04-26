@@ -2,6 +2,9 @@
 
 export const vehicles = [
   { id: 'mritunjay', reg: 'Hyundai Venue', model: 'Hyundai Venue', year: 2024, type: 'SUV', driver: 'Mritunjay', status: 'idle', fuel: 0, temp: 0, lat: 0, lng: 0, speed: 0, rpm: 0, engine_load: 0, throttle: 0, intake_air: 0, battery: 0, insurance: '2026-12-31', pollution: '2026-12-31', lastService: '2025-01-01', odometer: 0 },
+  { id: 'V002', reg: 'DL 5S CD 5678', model: 'Mahindra Scorpio', year: 2022, type: 'SUV', driver: 'Priya Nair', status: 'active', fuel: 35, temp: 88, lat: 28.6139, lng: 77.2090, speed: 48, rpm: 2800, engine_load: 55, throttle: 32, intake_air: 42, battery: 13.2, insurance: '2025-03-20', pollution: '2025-06-10', lastService: '2024-11-15', odometer: 54200, alcohol_level: 3, mq3_voltage: 3.21 },
+  { id: 'V007', reg: 'MH 14 ZZ 0007', model: 'Tata Nexon', year: 2023, type: 'SUV', driver: 'Demo Driver', status: 'active', fuel: 62, temp: 82, lat: 18.5204, lng: 73.8567, speed: 34, rpm: 2100, engine_load: 48, throttle: 28, intake_air: 38, battery: 13.6, insurance: '2027-06-30', pollution: '2027-06-30', lastService: '2025-03-01', odometer: 12300, alcohol_level: 3, mq3_voltage: 3.45, gps_valid: false, satellites: 0, altitude: 0 },
+  { id: 'V008', reg: 'KA 05 MN 8008', model: 'Maruti Ertiga', year: 2023, type: 'MPV', driver: 'GPS Demo Driver', status: 'active', fuel: 55, temp: 78, lat: 12.9716, lng: 77.5946, speed: 52, rpm: 2400, engine_load: 42, throttle: 35, intake_air: 34, battery: 13.8, insurance: '2027-08-15', pollution: '2027-08-15', lastService: '2025-02-10', odometer: 28400, alcohol_level: 0, mq3_voltage: 0.21, gps_valid: true, satellites: 8, altitude: 920 },
 ];
 
 export const alerts = [
@@ -10,6 +13,7 @@ export const alerts = [
   { id: 'A004', vehicleId: 'V006', vehicleReg: 'RJ 14 KL 2345', type: 'Insurance Expired', severity: 'danger', message: 'Insurance expired on 22 Jul 2024', time: '2 days ago', resolved: false },
   { id: 'A005', vehicleId: 'V002', vehicleReg: 'DL 5S CD 5678', type: 'Low Fuel', severity: 'warning', message: 'Fuel level at 35% — Consider refueling', time: '3 hours ago', resolved: false },
   { id: 'A006', vehicleId: 'V001', vehicleReg: 'MH 12 AB 1234', type: 'Pollution Expiry', severity: 'info', message: 'Pollution certificate expires in 45 days', time: '5 hours ago', resolved: true },
+  { id: 'A007', vehicleId: 'V007', vehicleReg: 'MH 14 ZZ 0007', type: 'Alcohol Detected', severity: 'danger', message: 'HIGH alcohol detected — MQ-3 sensor: 3.45V · Level 3/3. Stop vehicle immediately!', time: '2 min ago', resolved: false },
 ];
 
 export const drivers = [

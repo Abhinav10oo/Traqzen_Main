@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { DataProvider } from './contexts/DataContext';
 import Landing from './pages/Landing';
@@ -55,6 +56,20 @@ export default function App() {
       <AuthProvider>
         <DataProvider>
           <AppRoutes />
+          <Toaster
+            position="bottom-right"
+            richColors
+            expand={false}
+            duration={5000}
+            toastOptions={{
+              style: {
+                background: 'rgba(4,15,20,0.97)',
+                border: '1px solid rgba(42,142,158,0.25)',
+                color: '#e2e8f0',
+                fontSize: '0.88rem',
+              },
+            }}
+          />
         </DataProvider>
       </AuthProvider>
     </BrowserRouter>

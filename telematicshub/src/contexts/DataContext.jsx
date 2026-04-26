@@ -34,7 +34,23 @@ export function DataProvider({ children }) {
   const stopSimRef = useRef(null);
 
   useEffect(() => {
-    let alertsUnsub = null;
+    let vehiclesUnsub = null;
+    let alertsUnsub   = null;
+
+    const fakeBase = fake.vehicles.find(v => v.id === 'mritunjay') || {};
+
+    function buildVehicleList(docs) {
+      const firestoreIds = new Set(docs.map(d => d._docId));
+      const firestoreVehicles = docs.map(d => {
+        if (d._docId === 'mritunjay') {
+          return { ...fakeBase, ...d, id: 'mritunjay' };
+        }
+        return { ...d, id: d.id || d._docId };
+      });
+      // Keep fake-only vehicles (not stored in Firestore) so demo vehicles always appear
+      const fakeOnly = fake.vehicles.filter(v => !firestoreIds.has(v.id));
+      return [...firestoreVehicles, ...fakeOnly];
+    }
 
     async function load() {
       if (DEMO_MODE) {
@@ -46,10 +62,7 @@ export function DataProvider({ children }) {
         const snap = await getDocs(collection(db, 'vehicles'));
         if (snap.empty) await seedFirestore();
 
-        const [
-          vData, dData, mData, docData, tData, ftData, tdData, sdData,
-        ] = await Promise.all([
-          fetchCollection('vehicles'),
+        const [dData, mData, docData, tData, ftData, tdData, sdData] = await Promise.all([
           fetchCollection('drivers'),
           fetchCollection('maintenance'),
           fetchCollection('documents'),
@@ -59,8 +72,6 @@ export function DataProvider({ children }) {
           fetchCollection('speedData'),
         ]);
 
-        const realVehicles = vData.filter(v => (v._docId || v.id) === 'mritunjay');
-        setVehicles(realVehicles.length ? realVehicles : fake.vehicles);
         if (dData.length)   setDrivers(dData);
         if (mData.length)   setMaintenance(mData);
         if (docData.length) setDocuments(docData);
@@ -69,7 +80,18 @@ export function DataProvider({ children }) {
         if (tdData.length)  setTripData(tdData);
         if (sdData.length)  setSpeedData(sdData);
 
-        // Real-time alerts listener — picks up alcohol/engine/fuel alerts instantly
+        // Real-time vehicles listener — picks up new/edited vehicles instantly
+        vehiclesUnsub = onSnapshot(
+          collection(db, 'vehicles'),
+          (vSnap) => {
+            const vData = vSnap.docs.map(d => ({ ...d.data(), _docId: d.id }));
+            const list  = buildVehicleList(vData);
+            setVehicles(list.length ? list : fake.vehicles);
+          },
+          (err) => console.warn('Vehicles listener error:', err.message)
+        );
+
+        // Real-time alerts listener
         alertsUnsub = onSnapshot(
           query(collection(db, 'alerts'), orderBy('created_at', 'desc'), limit(50)),
           (aSnap) => {
@@ -88,18 +110,15 @@ export function DataProvider({ children }) {
     load().then(() => {
       if (DEMO_MODE) {
         stopSimRef.current = startLiveSimulation(
-          setVehicles,
-          setAlerts,
-          setSpeedData,
-          setLiveTs,
-          3000
+          setVehicles, setAlerts, setSpeedData, setLiveTs, 3000
         );
       }
     });
 
     return () => {
       if (stopSimRef.current) stopSimRef.current();
-      if (alertsUnsub) alertsUnsub();
+      if (vehiclesUnsub) vehiclesUnsub();
+      if (alertsUnsub)   alertsUnsub();
     };
   }, []);
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { Link } from 'react-router-dom';
 
 const statusColors = { valid: 'success', 'expiring-soon': 'warning', expired: 'danger' };
@@ -9,13 +10,32 @@ const statusLabels = { valid: 'Valid', 'expiring-soon': 'Expiring Soon', expired
 export default function Documents() {
   const { view } = useOutletContext();
   const isOwner = view === 'owner';
+  const { userProfile } = useAuth();
+  const assignedVehicle = userProfile?.assignedVehicle || '';
   const { documents, vehicles } = useData();
   const [filter, setFilter] = useState('all');
   const [vehicleFilter, setVehicleFilter] = useState('all');
 
-  const filtered = documents.filter(d => {
+  // Resolve driver's assigned vehicle by ID or reg, fallback to mritunjay
+  const resolvedAssigned = (() => {
+    if (!assignedVehicle) return 'mritunjay';
+    const av = assignedVehicle.replace(/\s+/g, '').toLowerCase();
+    const match = vehicles.find(v => {
+      const vid = v._docId || v.id;
+      const reg = (v.reg || '').replace(/\s+/g, '').toLowerCase();
+      return vid === assignedVehicle || reg === av;
+    });
+    return match ? (match._docId || match.id) : 'mritunjay';
+  })();
+
+  // Drivers only see documents for their assigned vehicle
+  const scopedDocuments = isOwner
+    ? documents
+    : documents.filter(d => d.vehicleId === resolvedAssigned);
+
+  const filtered = scopedDocuments.filter(d => {
     const matchStatus  = filter === 'all' || d.status === filter;
-    const matchVehicle = vehicleFilter === 'all' || d.vehicleId === vehicleFilter;
+    const matchVehicle = !isOwner || vehicleFilter === 'all' || d.vehicleId === vehicleFilter;
     return matchStatus && matchVehicle;
   });
 
@@ -36,9 +56,9 @@ export default function Documents() {
       {/* Summary */}
       <div className="grid-3" style={{marginBottom:'24px'}}>
         {[
-          { label: 'Valid',         count: documents.filter(d=>d.status==='valid').length,          color:'#27ae60', icon:'✅' },
-          { label: 'Expiring Soon', count: documents.filter(d=>d.status==='expiring-soon').length,  color:'#f39c12', icon:'⏳' },
-          { label: 'Expired',       count: documents.filter(d=>d.status==='expired').length,        color:'#e74c3c', icon:'❌' },
+          { label: 'Valid',         count: scopedDocuments.filter(d=>d.status==='valid').length,          color:'#27ae60', icon:'✅' },
+          { label: 'Expiring Soon', count: scopedDocuments.filter(d=>d.status==='expiring-soon').length,  color:'#f39c12', icon:'⏳' },
+          { label: 'Expired',       count: scopedDocuments.filter(d=>d.status==='expired').length,        color:'#e74c3c', icon:'❌' },
         ].map((s, i) => (
           <div key={i} className="stat-card" style={{cursor:'pointer'}} onClick={() => setFilter(s.label.toLowerCase().replace(' ','-'))}>
             <div style={{fontSize:'1.8rem'}}>{s.icon}</div>
@@ -56,18 +76,18 @@ export default function Documents() {
           {['all','valid','expiring-soon','expired'].map(f => (
             <button key={f} className={`filter-tab ${filter===f?'active':''}`} onClick={() => setFilter(f)}>
               {f==='all'?'All':statusLabels[f]||f}
-              <span className="filter-count">{f==='all'?documents.length:documents.filter(d=>d.status===f).length}</span>
+              <span className="filter-count">{f==='all'?scopedDocuments.length:scopedDocuments.filter(d=>d.status===f).length}</span>
             </button>
           ))}
         </div>
-        <select
+        {isOwner && <select
           style={{background:'rgba(255,255,255,0.05)',border:'1px solid rgba(42,142,158,0.15)',borderRadius:8,padding:'8px 12px',color:'var(--text-light)',fontSize:'0.84rem'}}
           value={vehicleFilter}
           onChange={e=>setVehicleFilter(e.target.value)}
         >
           <option value="all">All Vehicles</option>
           {vehicles.map(v=><option key={v.id} value={v.id}>{v.reg}</option>)}
-        </select>
+        </select>}
       </div>
 
       {/* Documents grid */}

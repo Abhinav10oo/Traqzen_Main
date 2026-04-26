@@ -46,7 +46,7 @@ const char* PASS       = "oooooooo";
 // ── Backend ───────────────────────────────────────────────────────────────────
 // Run  ipconfig  on your laptop while connected to the hotspot
 // and set this to the "Wireless LAN IPv4 Address" you see.
-const char* SERVER_IP   = "192.168.79.83";   // ← update if laptop IP changes
+const char* SERVER_IP   = "192.168.243.83";   // ← update if laptop IP changes
 const int   SERVER_PORT = 8000;
 const char* VEHICLE_ID  = "mritunjay";
 const char* API_KEY     = "OBD2_ESP32_KEY";
@@ -66,6 +66,7 @@ int   speed_kmh    = 0;
 int   fuel_level   = 0;
 float engine_load  = 0.0;
 int   coolant_temp = 0;
+float battery_v    = 0.0;
 
 // ── Sensor Data (from Slave) ───────────────────────────────────────────────────
 int   mq3_raw      = 0;
@@ -88,9 +89,11 @@ unsigned long totalSent = 0;
 unsigned long lastHTTP        = 0;
 unsigned long lastOBD         = 0;
 unsigned long lastStatus      = 0;
+unsigned long lastBTRetry     = 0;
 const unsigned long HTTP_INTERVAL   = 5000;
 const unsigned long OBD_INTERVAL    = 1000;
 const unsigned long STATUS_INTERVAL = 3000;
+const unsigned long BT_RETRY_INTERVAL = 15000;  // retry BT every 15s, not every 1s
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LED
@@ -119,8 +122,8 @@ void printStatus() {
   else if (lastHttpCode == 0)   { Serial.println("NOT SENT YET"); }
   else                          { Serial.print("ERROR: "); Serial.println(lastHttpCode); }
   Serial.println("------ OBD ------");
-  Serial.printf("RPM: %d  Speed: %d km/h  Fuel: %d%%  Load: %.1f%%  Coolant: %d C\n",
-    rpm, speed_kmh, fuel_level, engine_load, coolant_temp);
+  Serial.printf("RPM: %d  Speed: %d km/h  Fuel: %d%%  Load: %.1f%%  Coolant: %d C  Battery: %.1fV\n",
+    rpm, speed_kmh, fuel_level, engine_load, coolant_temp, battery_v);
   Serial.println("------ Sensors ------");
   Serial.printf("Alcohol: %d (%.2fV raw=%d)  GPS: %s\n",
     alcohol_lvl, mq3_voltage, mq3_raw, gps_valid ? "VALID" : "NO FIX");
@@ -228,11 +231,28 @@ void readOBDData() {
   }
   elmConnected = true;
   int a, b; String r;
-  r = elmQuery("010C"); if (extractBytes(r, a, b)) rpm         = ((a * 256) + b) / 4;
-  r = elmQuery("010D"); if (extractBytes(r, a, b)) speed_kmh   = a;
-  r = elmQuery("012F"); if (extractBytes(r, a, b)) fuel_level  = (a * 100) / 255;
-  r = elmQuery("0104"); if (extractBytes(r, a, b)) engine_load = (a * 100.0) / 255.0;
+  r = elmQuery("010C"); if (extractBytes(r, a, b)) rpm          = ((a * 256) + b) / 4;
+  r = elmQuery("010D"); if (extractBytes(r, a, b)) speed_kmh    = a;
+  r = elmQuery("012F"); if (extractBytes(r, a, b)) fuel_level   = (a * 100) / 255;
+  r = elmQuery("0104"); if (extractBytes(r, a, b)) engine_load  = (a * 100.0) / 255.0;
   r = elmQuery("0105"); if (extractBytes(r, a, b)) coolant_temp = a - 40;
+
+  // Read battery voltage via ELM327 AT RV command
+  ELM327.print("AT RV\r");
+  String rv = "";
+  unsigned long t = millis();
+  while (millis() - t < 1000) {
+    if (ELM327.available()) {
+      char c = ELM327.read();
+      if (c == '>') break;
+      rv += c;
+    }
+  }
+  rv.trim();
+  // Response looks like "12.4V" — strip the V and parse
+  rv.replace("V", ""); rv.replace("\r", ""); rv.replace("\n", ""); rv.trim();
+  float parsed = rv.toFloat();
+  if (parsed > 6.0 && parsed < 20.0) battery_v = parsed;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -253,7 +273,7 @@ void sendToBackend() {
   doc["engine_load"]   = (int)engine_load;
   doc["throttle"]      = 0;
   doc["intake_air"]    = 0;
-  doc["battery"]       = 0.0;
+  doc["battery"]       = battery_v;
   doc["lat"]           = gps_valid ? latitude  : 0.0;
   doc["lng"]           = gps_valid ? longitude : 0.0;
   doc["alcohol_level"] = alcohol_lvl;
@@ -316,6 +336,7 @@ void setup() {
   // Bluetooth ELM327
   Serial.println("[BT] Starting Bluetooth Master...");
   ELM327.begin("ESP32_Master", true);
+  ELM327.setPin("1234", 4);
   Serial.printf("[BT] Connecting to ELM327 MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
     ELM_MAC[0], ELM_MAC[1], ELM_MAC[2], ELM_MAC[3], ELM_MAC[4], ELM_MAC[5]);
 
@@ -340,15 +361,23 @@ void loop() {
 
   if (millis() - lastOBD >= OBD_INTERVAL) {
     lastOBD = millis();
-    // Retry ELM327 if disconnected
-    if (!elmConnected || !ELM327.connected()) {
+    readOBDData();
+  }
+
+  // Retry BT on a separate slower interval so it doesn't block the main loop
+  if (!elmConnected || !ELM327.connected()) {
+    if (millis() - lastBTRetry >= BT_RETRY_INTERVAL) {
+      lastBTRetry = millis();
+      Serial.println("[BT] Retrying ELM327 connection...");
+      ELM327.setPin("1234", 4);
       if (ELM327.connect(ELM_MAC)) {
         elmConnected = true;
         Serial.println("[BT] ELM327 reconnected!");
         delay(500); initELM327();
+      } else {
+        Serial.println("[BT] ELM327 retry failed — check adapter power and MAC");
       }
     }
-    readOBDData();
   }
 
   if (millis() - lastHTTP >= HTTP_INTERVAL) {

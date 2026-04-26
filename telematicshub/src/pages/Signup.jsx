@@ -23,7 +23,7 @@ export default function Signup() {
   const { signup } = useAuth();
   const [form, setForm] = useState({
     firstName: '', lastName: '', email: '', phone: '',
-    password: '', confirm: '', role: 'owner',
+    password: '', confirm: '', role: 'owner', assignedVehicle: '',
   });
   const [showPass, setShowPass]       = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -39,7 +39,7 @@ export default function Signup() {
     }
     setLoading(true);
     try {
-      await signup(form.firstName, form.lastName, form.email, form.phone, form.password, form.role);
+      await signup(form.firstName, form.lastName, form.email, form.phone, form.password, form.role, form.assignedVehicle);
       navigate('/dashboard/overview');
     } catch (err) {
       if (err.code === 'auth/email-already-in-use') setError('An account with this email already exists.');
@@ -234,6 +234,22 @@ export default function Signup() {
                   </div>
                 </div>
               </div>
+
+              {/* Vehicle ID for drivers */}
+              {form.role === 'driver' && (
+                <div className="form-group">
+                  <label>Vehicle Registration / ID</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. MH 01 AB 1234 or mritunjay"
+                    value={form.assignedVehicle}
+                    onChange={e => setForm(f => ({ ...f, assignedVehicle: e.target.value }))}
+                  />
+                  <span style={{ fontSize: '0.73rem', color: '#64748b', marginTop: 4, display: 'block' }}>
+                    Enter your vehicle's registration number or ID assigned by your fleet owner.
+                  </span>
+                </div>
+              )}
 
               <label className="checkbox-wrap" style={{ marginTop: '2px' }}>
                 <input type="checkbox" required />

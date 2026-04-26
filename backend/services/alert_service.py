@@ -8,6 +8,7 @@ Deduplicates: will not create a duplicate unresolved alert of the same type.
 from datetime import datetime, timezone, date
 from core.firebase_admin import db
 from core.config import settings
+from services.sms_service import send_alcohol_alert_sms
 
 
 def _has_open_alert(vehicle_id: str, alert_type: str) -> bool:
@@ -23,9 +24,10 @@ def _has_open_alert(vehicle_id: str, alert_type: str) -> bool:
     return any(True for _ in docs)
 
 
-def _create_alert(vehicle_id: str, alert_type: str, severity: str, message: str):
+def _create_alert(vehicle_id: str, alert_type: str, severity: str, message: str) -> bool:
+    """Create an alert if no open one of this type exists. Returns True if a new alert was written."""
     if _has_open_alert(vehicle_id, alert_type):
-        return
+        return False
     db.collection("alerts").add({
         "vehicle_id":  vehicle_id,
         "alert_type":  alert_type,
@@ -34,6 +36,16 @@ def _create_alert(vehicle_id: str, alert_type: str, severity: str, message: str)
         "resolved":    False,
         "created_at":  datetime.now(timezone.utc).isoformat(),
     })
+    return True
+
+
+def _get_owner_phones() -> list[str]:
+    """Return phone numbers of all users with role='owner' from the users collection."""
+    try:
+        docs = db.collection("users").where("role", "==", "owner").stream()
+        return [d.to_dict().get("phone") for d in docs if d.to_dict().get("phone")]
+    except Exception:
+        return []
 
 
 def check_and_create_alerts(vehicle_id: str, reading: dict):
@@ -71,15 +83,22 @@ def check_and_create_alerts(vehicle_id: str, reading: dict):
     alcohol = reading.get("alcohol_level")
     if alcohol is not None:
         if alcohol == 3:
-            _create_alert(
+            created = _create_alert(
                 vehicle_id, "alcohol_high", "danger",
                 f"HIGH alcohol detected (level {alcohol}/3) — driver may be impaired!"
             )
         elif alcohol == 2:
-            _create_alert(
+            created = _create_alert(
                 vehicle_id, "alcohol_moderate", "warning",
                 f"Moderate alcohol detected (level {alcohol}/3) — please verify driver condition"
             )
+        else:
+            created = False
+
+        # Send SMS only when a fresh alert is created (deduplication is already handled above)
+        if created and alcohol >= 2:
+            for phone in _get_owner_phones():
+                send_alcohol_alert_sms(vehicle_id, alcohol, phone)
 
 
 def check_document_expiry_alerts():

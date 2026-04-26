@@ -2,6 +2,7 @@ import { useOutletContext } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -18,34 +19,41 @@ function LiveOBDPanel() {
 
   // Real-time Firestore listener
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'vehicles', 'mritunjay'), (snap) => {
-      if (snap.exists()) {
-        const d = snap.data();
-        const r = d.last_reading || {};
-        setObd({
-          rpm:           r.rpm           ?? 0,
-          speed:         r.speed         ?? 0,
-          temp:          r.temp          ?? 0,
-          fuel:          r.fuel          ?? 0,
-          engine_load:   r.engine_load   ?? 0,
-          throttle:      r.throttle      ?? 0,
-          intake_air:    r.intake_air    ?? 0,
-          battery:       r.battery       ?? 0,
-          alcohol_level: r.alcohol_level ?? 0,
-          mq3_voltage:   r.mq3_voltage   ?? 0,
-          gps_valid:     r.gps_valid     ?? false,
-          latitude:      r.lat           ?? 0,
-          longitude:     r.lng           ?? 0,
-          altitude:      r.altitude      ?? 0,
-          satellites:    r.satellites    ?? 0,
-          status:        d.status        ?? 'offline',
-        });
-        setLastSeen(new Date());
-        setOnline(true);
-      } else {
+    const unsub = onSnapshot(
+      doc(db, 'vehicles', 'mritunjay'),
+      (snap) => {
+        if (snap.exists()) {
+          const d = snap.data();
+          const r = d.last_reading || {};
+          setObd({
+            rpm:           r.rpm           ?? 0,
+            speed:         r.speed         ?? 0,
+            temp:          r.temp          ?? 0,
+            fuel:          r.fuel          ?? 0,
+            engine_load:   r.engine_load   ?? 0,
+            throttle:      r.throttle      ?? 0,
+            intake_air:    r.intake_air    ?? 0,
+            battery:       r.battery       ?? 0,
+            alcohol_level: r.alcohol_level ?? 0,
+            mq3_voltage:   r.mq3_voltage   ?? 0,
+            gps_valid:     r.gps_valid     ?? false,
+            latitude:      r.lat           ?? 0,
+            longitude:     r.lng           ?? 0,
+            altitude:      r.altitude      ?? 0,
+            satellites:    r.satellites    ?? 0,
+            status:        d.status        ?? 'offline',
+          });
+          setLastSeen(new Date());
+          setOnline(true);
+        } else {
+          setOnline(false);
+        }
+      },
+      (err) => {
+        console.error('[LiveOBD] Firestore error:', err.code, err.message);
         setOnline(false);
       }
-    });
+    );
     return () => unsub();
   }, []);
 
@@ -330,102 +338,266 @@ function LiveBadge({ liveTs }) {
   );
 }
 
+// ── Static Vehicle Panel (for non-ESP32 vehicles) ────────────────────────────
+function VehicleStaticPanel({ vehicle }) {
+  if (!vehicle) return null;
+  const fuelColor = (vehicle.fuel || 0) < 15 ? '#e74c3c' : (vehicle.fuel || 0) < 30 ? '#f39c12' : '#27ae60';
+  const tempColor = (vehicle.temp || 0) > 100 ? '#e74c3c' : (vehicle.temp || 0) > 90 ? '#f39c12' : '#27ae60';
+  const statusColor = { active: '#27ae60', idle: '#3ab5c8', maintenance: '#f39c12', offline: '#e74c3c' };
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(20,30,50,0.95))',
+      border: '1px solid rgba(255,255,255,0.07)',
+      borderRadius: 16, padding: '18px 20px', marginBottom: 20,
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: '1.2rem' }}>🚗</span>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#e2e8f0' }}>
+              {vehicle.reg || vehicle.name || 'Vehicle'} — Details
+            </div>
+            <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 1 }}>
+              {vehicle.model || '—'} · {vehicle.year || '—'} · Driver: {vehicle.driver || 'Unassigned'}
+            </div>
+          </div>
+        </div>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          background: `${statusColor[vehicle.status] || '#64748b'}22`,
+          border: `1px solid ${statusColor[vehicle.status] || '#64748b'}55`,
+          borderRadius: 20, padding: '3px 12px',
+          fontSize: '0.73rem', fontWeight: 600,
+          color: statusColor[vehicle.status] || '#64748b',
+        }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor[vehicle.status] || '#64748b', display: 'inline-block' }} />
+          {vehicle.status || 'unknown'}
+        </span>
+      </div>
+
+      {/* Alcohol Alert Banner */}
+      {(vehicle.alcohol_level || 0) >= 2 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 14,
+          background: vehicle.alcohol_level >= 3 ? 'rgba(231,76,60,0.18)' : 'rgba(249,115,22,0.15)',
+          border: vehicle.alcohol_level >= 3 ? '2px solid rgba(231,76,60,0.7)' : '2px solid rgba(249,115,22,0.6)',
+          borderRadius: 12, padding: '14px 18px', marginBottom: 14,
+          animation: vehicle.alcohol_level >= 3 ? 'alcoholFlash 1s ease-in-out infinite' : 'none',
+        }}>
+          <span style={{ fontSize: '2rem', flexShrink: 0 }}>
+            {vehicle.alcohol_level >= 3 ? '🚨' : '⚠️'}
+          </span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: '1rem', color: vehicle.alcohol_level >= 3 ? '#ff6b6b' : '#f97316', letterSpacing: '0.03em' }}>
+              {vehicle.alcohol_level >= 3 ? 'DANGER — HIGH ALCOHOL DETECTED' : 'WARNING — MODERATE ALCOHOL DETECTED'}
+            </div>
+            <div style={{ fontSize: '0.8rem', color: '#cbd5e1', marginTop: 3 }}>
+              {vehicle.alcohol_level >= 3 ? 'Driver may be severely impaired. Stop the vehicle immediately!' : 'Alcohol traces detected. Driver fitness should be verified.'}
+              {vehicle.mq3_voltage && (
+                <span style={{ marginLeft: 12, fontSize: '0.75rem', color: '#94a3b8' }}>
+                  MQ-3 sensor: {Number(vehicle.mq3_voltage).toFixed(2)}V · Level {vehicle.alcohol_level}/3
+                </span>
+              )}
+            </div>
+          </div>
+          <div style={{
+            background: vehicle.alcohol_level >= 3 ? 'rgba(231,76,60,0.25)' : 'rgba(249,115,22,0.2)',
+            border: vehicle.alcohol_level >= 3 ? '1px solid rgba(231,76,60,0.5)' : '1px solid rgba(249,115,22,0.4)',
+            borderRadius: 8, padding: '6px 14px',
+            fontSize: '0.75rem', fontWeight: 700,
+            color: vehicle.alcohol_level >= 3 ? '#ff6b6b' : '#f97316', flexShrink: 0,
+          }}>
+            {['Sober','Trace','Moderate','High'][vehicle.alcohol_level]}
+          </div>
+        </div>
+      )}
+
+      {/* GPS Live Banner */}
+      {vehicle.gps_valid && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          background: 'rgba(39,174,96,0.08)',
+          border: '1px solid rgba(39,174,96,0.25)',
+          borderRadius: 10, padding: '10px 16px', marginBottom: 14,
+          fontSize: '0.8rem', color: '#94a3b8',
+        }}>
+          <span style={{ fontSize: '1.2rem' }}>📍</span>
+          <div style={{ flex: 1 }}>
+            <span style={{ color: '#27ae60', fontWeight: 600 }}>GPS Fix</span>
+            {' · '}
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {Number(vehicle.lat || 0).toFixed(6)}, {Number(vehicle.lng || 0).toFixed(6)}
+            </span>
+            <span style={{ marginLeft: 10, color: '#64748b' }}>
+              {vehicle.satellites || 0} satellites · {vehicle.altitude || 0}m alt
+            </span>
+          </div>
+          <a
+            href={`https://www.google.com/maps?q=${vehicle.lat},${vehicle.lng}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              background: 'rgba(39,174,96,0.15)',
+              border: '1px solid rgba(39,174,96,0.35)',
+              borderRadius: 6, padding: '4px 12px',
+              color: '#27ae60', fontWeight: 600,
+              fontSize: '0.75rem', textDecoration: 'none', flexShrink: 0,
+            }}
+          >
+            Open Map ↗
+          </a>
+        </div>
+      )}
+
+      {/* Metric tiles — full OBD set matching the live panel */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+        {[
+          { label: 'RPM',          value: vehicle.rpm || 0,                          unit: 'rpm',  color: (vehicle.rpm||0)<3000?'#27ae60':(vehicle.rpm||0)<6000?'#f39c12':'#e74c3c', bar: ((vehicle.rpm||0)/8000)*100 },
+          { label: 'Speed',        value: vehicle.speed || 0,                        unit: 'km/h', color: '#3ab5c8',  bar: ((vehicle.speed||0)/200)*100 },
+          { label: 'Coolant Temp', value: `${vehicle.temp || 0}°C`,                  unit: '',     color: tempColor,  bar: null },
+          { label: 'Engine Load',  value: vehicle.engine_load || 0,                  unit: '%',    color: '#a855f7',  bar: vehicle.engine_load || 0 },
+          { label: 'Intake Air',   value: vehicle.intake_air || 0,                   unit: '°C',   color: '#06b6d4',  bar: null },
+          { label: 'Fuel',         value: `${vehicle.fuel || 0}%`,                   unit: '',     color: fuelColor,  bar: vehicle.fuel || 0 },
+          { label: 'Battery',      value: Number(vehicle.battery || 0).toFixed(1),   unit: 'V',    color: (vehicle.battery||0)<11.5?'#e74c3c':(vehicle.battery||0)<12.4?'#f39c12':'#27ae60', bar: null },
+          { label: 'Alcohol',
+            value: ['Sober','Trace','Moderate','High'][vehicle.alcohol_level||0],
+            unit: vehicle.mq3_voltage ? `${Number(vehicle.mq3_voltage).toFixed(2)}V` : '—',
+            color: (vehicle.alcohol_level||0)===0?'#27ae60':(vehicle.alcohol_level||0)===1?'#f39c12':(vehicle.alcohol_level||0)===2?'#f97316':'#e74c3c',
+            bar: null },
+          { label: 'GPS',
+            value: vehicle.gps_valid ? `${Number(vehicle.lat||0).toFixed(4)}` : 'No Fix',
+            unit: vehicle.gps_valid ? `${Number(vehicle.lng||0).toFixed(4)} · ${vehicle.satellites||0} sats` : 'Waiting…',
+            color: vehicle.gps_valid ? '#27ae60' : '#64748b',
+            bar: null },
+          { label: 'Odometer',   value: (vehicle.odometer||0).toLocaleString(), unit: 'km',   color: '#a855f7', bar: null },
+          { label: 'Insurance',  value: vehicle.insurance || '—',               unit: '',     color: '#64748b', bar: null },
+          { label: 'Pollution',  value: vehicle.pollution || '—',               unit: '',     color: '#64748b', bar: null },
+        ].map((m, i) => (
+          <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '12px 14px' }}>
+            <div style={{ fontSize: '0.65rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>{m.label}</div>
+            <div style={{ fontSize: '1.3rem', fontWeight: 800, color: m.color, lineHeight: 1 }}>{m.value}</div>
+            <div style={{ fontSize: '0.7rem', color: '#475569', marginTop: 2 }}>{m.unit}</div>
+            {m.bar !== null && (
+              <div style={{ marginTop: 8, height: 3, background: 'rgba(255,255,255,0.05)', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${Math.min(100, Math.max(0, m.bar))}%`, background: m.color, borderRadius: 2 }} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 10, fontSize: '0.75rem', color: '#475569', textAlign: 'right' }}>
+        Demo vehicle — showing stored fake data
+      </div>
+    </div>
+  );
+}
+
 export default function Overview() {
   const { view } = useOutletContext();
+  const { userProfile } = useAuth();
+  const isOwner = view === 'owner';
+  const assignedVehicle = userProfile?.assignedVehicle || 'mritunjay';
+
   const { vehicles, alerts, fuelTrend, tripData, recentTrips, liveTs } = useData();
 
-  const activeCount      = vehicles.filter(v => v.status === 'active').length;
-  const alertCount       = alerts.filter(a => a.resolved !== true).length;
-  const maintenanceCount = vehicles.filter(v => v.status === 'maintenance').length;
-  const offlineCount     = vehicles.filter(v => v.status === 'offline').length;
+  // Resolve driver's assigned vehicle by ID or registration number, fallback to mritunjay
+  const resolvedAssigned = (() => {
+    if (!assignedVehicle || assignedVehicle === 'mritunjay') return 'mritunjay';
+    const av = assignedVehicle.replace(/\s+/g, '').toLowerCase();
+    const match = vehicles.find(v => {
+      const vid = v._docId || v.id;
+      const reg = (v.reg || '').replace(/\s+/g, '').toLowerCase();
+      return vid === assignedVehicle || reg === av;
+    });
+    return match ? (match._docId || match.id) : 'mritunjay';
+  })();
+  const resolvedReg = vehicles.find(v => (v._docId || v.id) === resolvedAssigned)?.reg || '';
+
+  const [selectedId, setSelectedId] = useState(isOwner ? 'mritunjay' : resolvedAssigned);
+
+  // Keep driver locked to their assigned vehicle
+  useEffect(() => {
+    if (!isOwner) setSelectedId(resolvedAssigned);
+  }, [isOwner, resolvedAssigned]);
+
+  // For drivers, scope all lists to their assigned vehicle
+  const visibleVehicles = isOwner
+    ? vehicles
+    : vehicles.filter(v => (v._docId || v.id) === resolvedAssigned);
+  const visibleAlerts = isOwner
+    ? alerts
+    : alerts.filter(a => !a.vehicle_id || a.vehicle_id === resolvedAssigned || a.vehicleId === resolvedAssigned);
+  const visibleTrips = isOwner
+    ? recentTrips
+    : recentTrips.filter(t => t.vehicleId === resolvedAssigned || t.vehicle === resolvedReg || t.vehicle === resolvedAssigned);
+
+  const activeCount      = visibleVehicles.filter(v => v.status === 'active').length;
+  const alertCount       = visibleAlerts.filter(a => a.resolved !== true).length;
+  const maintenanceCount = visibleVehicles.filter(v => v.status === 'maintenance').length;
+  const offlineCount     = visibleVehicles.filter(v => v.status === 'offline').length;
 
   const severityColor = { danger: '#e74c3c', warning: '#f39c12', info: '#2a8e9e' };
+  const statusColor   = { active: '#27ae60', idle: '#3ab5c8', maintenance: '#f39c12', offline: '#e74c3c' };
+
+  const selectedVehicle = vehicles.find(v => (v._docId || v.id) === selectedId) || vehicles[0];
+  const isLiveVehicle   = (selectedVehicle?._docId || selectedVehicle?.id) === 'mritunjay';
 
   return (
     <div className="overview-page animate-fade-in">
       {/* Page header */}
       <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
         <div>
-          <h1>Fleet Overview</h1>
-          <p>Live status and performance snapshot of your entire fleet</p>
+          <h1>{isOwner ? 'Fleet Overview' : 'My Vehicle'}</h1>
+          <p>{isOwner ? 'Live status and performance snapshot of your entire fleet' : 'Your assigned vehicle — live telemetry and status'}</p>
         </div>
         <LiveBadge liveTs={liveTs} />
       </div>
 
-      {/* ── Live OBD Panel (mritunjay / ESP32) ── */}
-      <LiveOBDPanel />
+      {/* ── Vehicle Selector (owner only) ── */}
+      {isOwner && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, fontWeight: 600 }}>
+            Select Vehicle
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {vehicles.map(v => {
+              const vid = v._docId || v.id;
+              const isSelected = vid === selectedId;
+              const sc = statusColor[v.status] || '#64748b';
+              return (
+                <button
+                  key={vid}
+                  onClick={() => setSelectedId(vid)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    background: isSelected ? 'rgba(42,142,158,0.15)' : 'rgba(255,255,255,0.03)',
+                    border: isSelected ? '1px solid rgba(42,142,158,0.5)' : '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: 10, padding: '8px 14px',
+                    cursor: 'pointer', transition: 'all 0.2s',
+                    outline: 'none',
+                  }}
+                >
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: sc, display: 'inline-block', flexShrink: 0 }} />
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 700, color: isSelected ? '#3ab5c8' : '#e2e8f0' }}>
+                      {v.reg || v.name || vid}
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                      {v.model || '—'} · {v.status || 'unknown'}
+                      {vid === 'mritunjay' && ' · ESP32 Live'}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
-      {/* Live vehicle telemetry ticker */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: 12,
-        marginBottom: 20,
-      }}>
-        {vehicles.map(v => {
-          const isMoving = v.status === 'active';
-          const tempColor = v.temp > 100 ? '#e74c3c' : v.temp > 92 ? '#f39c12' : '#2a8e9e';
-          const fuelColor = v.fuel < 15 ? '#e74c3c' : v.fuel < 30 ? '#f39c12' : '#27ae60';
-          return (
-            <div key={v.id} style={{
-              background: 'var(--card-bg, #1a2432)',
-              border: isMoving
-                ? '1px solid rgba(39,174,96,0.35)'
-                : '1px solid rgba(255,255,255,0.07)',
-              borderRadius: 12,
-              padding: '12px 16px',
-              position: 'relative',
-              overflow: 'hidden',
-            }}>
-              {/* Moving indicator stripe */}
-              {isMoving && (
-                <div style={{
-                  position: 'absolute', top: 0, left: 0, width: '100%', height: 3,
-                  background: 'linear-gradient(90deg,#27ae60,#3ab5c8)',
-                }} />
-              )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary, #e2eaf0)' }}>
-                  {v.reg}
-                </span>
-                <span className={`badge badge-${v.status === 'active' ? 'success' : v.status === 'idle' ? 'info' : v.status === 'maintenance' ? 'warning' : 'danger'}`}>
-                  {v.status}
-                </span>
-              </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted, #94aab0)', marginBottom: 8 }}>
-                {v.model} · {v.driver}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                {/* Speed */}
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: isMoving ? '#3ab5c8' : '#94aab0' }}>
-                    {v.speed}
-                  </div>
-                  <div style={{ fontSize: '0.65rem', color: '#94aab0' }}>km/h</div>
-                </div>
-                {/* Fuel */}
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: fuelColor }}>
-                    {v.fuel}%
-                  </div>
-                  <div style={{ fontSize: '0.65rem', color: '#94aab0' }}>Fuel</div>
-                </div>
-                {/* Temp */}
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: tempColor }}>
-                    {v.temp}°
-                  </div>
-                  <div style={{ fontSize: '0.65rem', color: '#94aab0' }}>Temp</div>
-                </div>
-              </div>
-              {/* Odometer */}
-              <div style={{ marginTop: 8, fontSize: '0.72rem', color: '#94aab0', textAlign: 'right' }}>
-                ODO: {(v.odometer || 0).toLocaleString()} km
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {/* ── Vehicle Detail Panel ── */}
+      {isLiveVehicle ? <LiveOBDPanel /> : <VehicleStaticPanel vehicle={selectedVehicle} />}
 
       {/* Stat cards */}
       <div className="grid-4" style={{marginBottom:'24px'}}>
@@ -437,9 +609,9 @@ export default function Overview() {
             </svg>
           </div>
           <div className="stat-info">
-            <h3>{vehicles.length}</h3>
-            <p>Total Vehicles</p>
-            <div className="stat-change up">↑ 1 added this month</div>
+            <h3>{isOwner ? vehicles.length : 1}</h3>
+            <p>{isOwner ? 'Total Vehicles' : 'My Vehicle'}</p>
+            <div className="stat-change up">{isOwner ? '↑ 1 added this month' : '↑ Assigned to you'}</div>
           </div>
         </div>
 
@@ -531,11 +703,11 @@ export default function Overview() {
         {/* Vehicle status */}
         <div className="card">
           <div className="section-title">
-            Vehicle Status
+            {isOwner ? 'Vehicle Status' : 'My Vehicle Status'}
             <a href="/dashboard/vehicles" className="see-all">View all →</a>
           </div>
           <div className="vehicle-list-mini">
-            {vehicles.map(v => (
+            {visibleVehicles.map(v => (
               <div key={v.id} className="vehicle-mini-item">
                 <div className="vehicle-mini-info">
                   <div className="vehicle-mini-reg">{v.reg}</div>
@@ -565,7 +737,7 @@ export default function Overview() {
             <span className="badge badge-danger">{alertCount}</span>
           </div>
           <div className="alert-list">
-            {alerts.filter(a => a.resolved !== true).map(a => (
+            {visibleAlerts.filter(a => a.resolved !== true).map(a => (
               <div key={a.id} className={`alert-item alert-${a.severity}`}>
                 <div className="alert-dot" style={{background: severityColor[a.severity]}} />
                 <div className="alert-content">
@@ -600,7 +772,7 @@ export default function Overview() {
               </tr>
             </thead>
             <tbody>
-              {recentTrips.map(t => (
+              {visibleTrips.map(t => (
                 <tr key={t.id}>
                   <td>{t.vehicle}</td>
                   <td>{t.driver}</td>

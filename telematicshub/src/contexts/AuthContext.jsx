@@ -61,10 +61,11 @@ export function AuthProvider({ children }) {
   }
 
   // Create account + save profile to Firestore
-  async function signup(firstName, lastName, email, phone, password, role) {
+  async function signup(firstName, lastName, email, phone, password, role, assignedVehicle = '') {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     const name = `${firstName} ${lastName}`.trim();
-    const profile = { firstName, lastName, name, email, phone, role, createdAt: serverTimestamp() };
+    const profile = { firstName, lastName, name, email, phone, role, createdAt: serverTimestamp(),
+      ...(role === 'driver' && assignedVehicle ? { assignedVehicle: assignedVehicle.trim() } : {}) };
     try {
       await setDoc(doc(db, 'users', cred.user.uid), profile);
     } catch {

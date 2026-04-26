@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     # Scheduler
     DOCUMENT_REMINDER_DAYS: str = "30,7,1"
 
+    # SMS — Twilio
+    SMS_ENABLED: bool = False
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_FROM_NUMBER: str = ""
+
     @property
     def allowed_origins_list(self) -> List[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",")]
