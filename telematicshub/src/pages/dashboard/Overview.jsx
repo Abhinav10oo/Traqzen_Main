@@ -10,8 +10,8 @@ import {
 import { useData } from '../../contexts/DataContext';
 import './Overview.css';
 
-// ── Live OBD Panel (Firestore onSnapshot → vehicles/mritunjay) ──────────────
-function LiveOBDPanel() {
+// ── Live OBD Panel (Firestore onSnapshot → dynamic vehicle) ─────────────────
+function LiveOBDPanel({ vehicleId }) {
   const [obd, setObd]         = useState(null);
   const [lastSeen, setLastSeen] = useState(null);
   const [secAgo, setSecAgo]   = useState(0);
@@ -19,8 +19,9 @@ function LiveOBDPanel() {
 
   // Real-time Firestore listener
   useEffect(() => {
+    if (!vehicleId) return;
     const unsub = onSnapshot(
-      doc(db, 'vehicles', 'mritunjay'),
+      doc(db, 'vehicles', vehicleId),
       (snap) => {
         if (snap.exists()) {
           const d = snap.data();
@@ -498,28 +499,36 @@ export default function Overview() {
   const { view } = useOutletContext();
   const { userProfile } = useAuth();
   const isOwner = view === 'owner';
-  const assignedVehicle = userProfile?.assignedVehicle || 'mritunjay';
+  const assignedVehicle = userProfile?.assignedVehicle || '';
 
   const { vehicles, alerts, fuelTrend, tripData, recentTrips, liveTs } = useData();
 
-  // Resolve driver's assigned vehicle by ID or registration number, fallback to mritunjay
+  // Resolve driver's assigned vehicle by ID or registration number
   const resolvedAssigned = (() => {
-    if (!assignedVehicle || assignedVehicle === 'mritunjay') return 'mritunjay';
+    if (!assignedVehicle) return vehicles[0]?._docId || vehicles[0]?.id || '';
     const av = assignedVehicle.replace(/\s+/g, '').toLowerCase();
     const match = vehicles.find(v => {
       const vid = v._docId || v.id;
       const reg = (v.reg || '').replace(/\s+/g, '').toLowerCase();
       return vid === assignedVehicle || reg === av;
     });
-    return match ? (match._docId || match.id) : 'mritunjay';
+    return match ? (match._docId || match.id) : (vehicles[0]?._docId || vehicles[0]?.id || '');
   })();
   const resolvedReg = vehicles.find(v => (v._docId || v.id) === resolvedAssigned)?.reg || '';
 
-  const [selectedId, setSelectedId] = useState(isOwner ? 'mritunjay' : resolvedAssigned);
+  const firstVehicleId = vehicles[0]?._docId || vehicles[0]?.id || '';
+  const [selectedId, setSelectedId] = useState('');
+
+  // Set initial selected vehicle once vehicles load
+  useEffect(() => {
+    if (vehicles.length && !selectedId) {
+      setSelectedId(isOwner ? firstVehicleId : resolvedAssigned);
+    }
+  }, [vehicles, isOwner, firstVehicleId, resolvedAssigned]);
 
   // Keep driver locked to their assigned vehicle
   useEffect(() => {
-    if (!isOwner) setSelectedId(resolvedAssigned);
+    if (!isOwner && resolvedAssigned) setSelectedId(resolvedAssigned);
   }, [isOwner, resolvedAssigned]);
 
   // For drivers, scope all lists to their assigned vehicle
@@ -542,7 +551,9 @@ export default function Overview() {
   const statusColor   = { active: '#27ae60', idle: '#3ab5c8', maintenance: '#f39c12', offline: '#e74c3c' };
 
   const selectedVehicle = vehicles.find(v => (v._docId || v.id) === selectedId) || vehicles[0];
-  const isLiveVehicle   = (selectedVehicle?._docId || selectedVehicle?.id) === 'mritunjay';
+  const selectedVehicleId = selectedVehicle?._docId || selectedVehicle?.id || '';
+  // All registered vehicles with a vehicle_id are ESP32-connected
+  const isLiveVehicle = !!selectedVehicle?.vehicle_id;
 
   return (
     <div className="overview-page animate-fade-in">
@@ -586,7 +597,7 @@ export default function Overview() {
                     </div>
                     <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
                       {v.model || '—'} · {v.status || 'unknown'}
-                      {vid === 'mritunjay' && ' · ESP32 Live'}
+                      {v.vehicle_id && ' · ESP32 Live'}
                     </div>
                   </div>
                 </button>
@@ -597,7 +608,10 @@ export default function Overview() {
       )}
 
       {/* ── Vehicle Detail Panel ── */}
-      {isLiveVehicle ? <LiveOBDPanel /> : <VehicleStaticPanel vehicle={selectedVehicle} />}
+      {isLiveVehicle
+        ? <LiveOBDPanel vehicleId={selectedVehicleId} />
+        : <VehicleStaticPanel vehicle={selectedVehicle} />
+      }
 
       {/* Stat cards */}
       <div className="grid-4" style={{marginBottom:'24px'}}>

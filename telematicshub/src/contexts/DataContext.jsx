@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { collection, getDocs, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, onSnapshot, query, orderBy, limit, where } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useAuth } from './AuthContext';
 
 const DataContext = createContext(null);
 
@@ -10,6 +11,7 @@ async function fetchCollection(name) {
 }
 
 export function DataProvider({ children }) {
+  const { currentUser } = useAuth();
   const [vehicles,    setVehicles]    = useState([]);
   const [alerts,      setAlerts]      = useState([]);
   const [drivers,     setDrivers]     = useState([]);
@@ -23,6 +25,13 @@ export function DataProvider({ children }) {
   const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
+    if (!currentUser) {
+      setVehicles([]);
+      setAlerts([]);
+      setDataLoading(false);
+      return;
+    }
+
     let vehiclesUnsub = null;
     let alertsUnsub   = null;
 
@@ -46,8 +55,9 @@ export function DataProvider({ children }) {
         if (tdData.length)  setTripData(tdData);
         if (sdData.length)  setSpeedData(sdData);
 
+        // Only load vehicles owned by the current user
         vehiclesUnsub = onSnapshot(
-          collection(db, 'vehicles'),
+          query(collection(db, 'vehicles'), where('owner_uid', '==', currentUser.uid)),
           (vSnap) => {
             const vData = vSnap.docs.map(d => ({ ...d.data(), id: d.id, _docId: d.id }));
             setVehicles(vData);

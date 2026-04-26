@@ -49,10 +49,18 @@ def create_vehicle(
     if existing:
         raise HTTPException(status_code=409, detail="Registration number already exists")
 
-    vehicle_data = {**payload, "owner_uid": uid, "status": "offline",
-                    "created_at": datetime.now(timezone.utc).isoformat()}
-    doc_ref = db.collection("vehicles").add(vehicle_data)
-    return {"id": doc_ref[1].id, **vehicle_data}
+    vehicle_id = payload.get("vehicle_id", "").strip()
+    if not vehicle_id:
+        raise HTTPException(status_code=400, detail="vehicle_id (Device ID) is required")
+
+    doc_ref = db.collection("vehicles").document(vehicle_id)
+    if doc_ref.get().exists:
+        raise HTTPException(status_code=409, detail="A vehicle with this Device ID already exists")
+
+    vehicle_data = {**payload, "vehicle_id": vehicle_id, "owner_uid": uid,
+                    "status": "offline", "created_at": datetime.now(timezone.utc).isoformat()}
+    doc_ref.set(vehicle_data)
+    return {"id": vehicle_id, **vehicle_data}
 
 
 @router.get("/{vehicle_id}")

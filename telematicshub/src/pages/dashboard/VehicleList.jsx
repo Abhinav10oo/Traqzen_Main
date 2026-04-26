@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { doc, collection, onSnapshot, updateDoc, setDoc } from 'firebase/firestore';
+import { doc, updateDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -30,7 +30,7 @@ function EditVehicleModal({ vehicle, onClose, onSaved }) {
     setSaving(true);
     setError('');
     try {
-      await updateDoc(doc(db, 'vehicles', 'mritunjay'), {
+      await updateDoc(doc(db, 'vehicles', vehicle._docId || vehicle.id), {
         reg:         form.reg,
         model:       form.model,
         year:        Number(form.year),
@@ -294,88 +294,64 @@ export default function VehicleList() {
   const assignedVehicle = userProfile?.assignedVehicle || '';
   const { vehicles } = useData();
 
-  // Resolve assigned vehicle by ID or registration number, fallback to mritunjay
+  // Resolve assigned vehicle for driver view
   const resolvedAssigned = (() => {
-    if (!assignedVehicle) return 'mritunjay';
+    if (!assignedVehicle) return vehicles[0]?._docId || vehicles[0]?.id || '';
     const av = assignedVehicle.replace(/\s+/g, '').toLowerCase();
     const match = vehicles.find(v => {
       const vid = v._docId || v.id;
       const reg = (v.reg || '').replace(/\s+/g, '').toLowerCase();
       return vid === assignedVehicle || reg === av;
     });
-    return match ? (match._docId || match.id) : 'mritunjay';
+    return match ? (match._docId || match.id) : '';
   })();
+
   const [selected,     setSelected]     = useState(null);
   const [editTarget,   setEditTarget]   = useState(null);
-  const [liveOBD,      setLiveOBD]      = useState({});
 
-  // Real-time Firestore listener for mritunjay
-  useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'vehicles', 'mritunjay'), (snap) => {
-      if (snap.exists()) {
-        const d = snap.data();
-        const r = d.last_reading || {};
-        setLiveOBD({
-          status:        d.status         ?? 'idle',
-          speed:         Math.round(r.speed       ?? 0),
-          fuel:          Math.round(r.fuel        ?? 0),
-          temp:          Math.round(r.temp        ?? 0),
-          rpm:           Math.round(r.rpm         ?? 0),
-          engine_load:   Math.round(r.engine_load ?? 0),
-          intake_air:    Math.round(r.intake_air  ?? 0),
-          battery:       r.battery       ?? 0,
-          lat:           r.lat           ?? 0,
-          lng:           r.lng           ?? 0,
-          alcohol_level: r.alcohol_level ?? 0,
-          mq3_voltage:   r.mq3_voltage   ?? 0,
-          gps_valid:     r.gps_valid     ?? false,
-          altitude:      r.altitude      ?? 0,
-          satellites:    r.satellites    ?? 0,
-          // Also pick up any edited display fields saved to Firestore
-          reg:         d.reg         || undefined,
-          model:       d.model       || undefined,
-          year:        d.year        || undefined,
-          driver:      d.driver      || undefined,
-          odometer:    d.odometer    || undefined,
-          insurance:   d.insurance   || undefined,
-          pollution:   d.pollution   || undefined,
-          lastService: d.lastService || undefined,
-        });
-      }
-    });
-    return () => unsub();
-  }, []);
-
-  // Merge live OBD data into the mritunjay entry (undefined values don't overwrite)
+  // DataContext already has real-time Firestore listeners — use directly
   const displayVehicles = vehicles.map(v => {
-    if ((v._docId || v.id) === 'mritunjay') {
-      const merged = { ...v };
-      Object.entries(liveOBD).forEach(([k, val]) => {
-        if (val !== undefined) merged[k] = val;
-      });
-      return merged;
-    }
-    return v;
+    const r = v.last_reading || {};
+    return {
+      ...v,
+      status:        v.status          ?? 'offline',
+      speed:         Math.round(r.speed        ?? v.speed        ?? 0),
+      fuel:          Math.round(r.fuel         ?? v.fuel         ?? 0),
+      temp:          Math.round(r.temp         ?? v.temp         ?? 0),
+      rpm:           Math.round(r.rpm          ?? 0),
+      engine_load:   Math.round(r.engine_load  ?? 0),
+      battery:       r.battery        ?? 0,
+      lat:           r.lat            ?? v.lat ?? 0,
+      lng:           r.lng            ?? v.lng ?? 0,
+      alcohol_level: r.alcohol_level  ?? 0,
+      mq3_voltage:   r.mq3_voltage    ?? 0,
+      gps_valid:     r.gps_valid      ?? false,
+      altitude:      r.altitude       ?? 0,
+      satellites:    r.satellites     ?? 0,
+    };
   });
 
+  const { currentUser } = useAuth();
   const [filter,       setFilter]       = useState('all');
   const [search,       setSearch]       = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [addForm,      setAddForm]      = useState({ reg:'', model:'', year:'', type:'SUV', driver:'', insurance:'', pollution:'', lastService:'' });
+  const [addForm,      setAddForm]      = useState({ vehicle_id:'', reg:'', model:'', year:'', type:'SUV', driver:'', insurance:'', pollution:'', lastService:'' });
   const [addSaving,    setAddSaving]    = useState(false);
   const [addError,     setAddError]     = useState('');
 
   const setAdd = (k, v) => setAddForm(f => ({ ...f, [k]: v }));
 
   async function handleAddVehicle() {
+    if (!addForm.vehicle_id.trim()) { setAddError('Device ID is required — must match the vehicle_id in your ESP32 code.'); return; }
     if (!addForm.reg.trim()) { setAddError('Registration number is required.'); return; }
     if (!addForm.model.trim()) { setAddError('Vehicle model is required.'); return; }
     setAddSaving(true);
     setAddError('');
     try {
-      const id = addForm.reg.trim().toLowerCase().replace(/\s+/g, '_');
+      const id = addForm.vehicle_id.trim().toLowerCase().replace(/\s+/g, '_');
       await setDoc(doc(db, 'vehicles', id), {
-        id,
+        vehicle_id:  id,
+        owner_uid:   currentUser.uid,
         reg:         addForm.reg.trim(),
         model:       addForm.model.trim(),
         year:        Number(addForm.year) || new Date().getFullYear(),
@@ -384,11 +360,11 @@ export default function VehicleList() {
         insurance:   addForm.insurance,
         pollution:   addForm.pollution,
         lastService: addForm.lastService,
-        status:      'idle',
+        status:      'offline',
         fuel:        0, temp: 0, speed: 0, odometer: 0,
         lat: 0, lng: 0,
       });
-      setAddForm({ reg:'', model:'', year:'', type:'SUV', driver:'', insurance:'', pollution:'', lastService:'' });
+      setAddForm({ vehicle_id:'', reg:'', model:'', year:'', type:'SUV', driver:'', insurance:'', pollution:'', lastService:'' });
       setShowAddModal(false);
     } catch (e) {
       setAddError('Failed to add vehicle: ' + e.message);
@@ -513,6 +489,10 @@ export default function VehicleList() {
             </div>
             <div className="modal-body">
               <div style={{display:'flex',flexDirection:'column',gap:'16px'}}>
+                <div className="form-group">
+                  <label>Device ID * <span style={{fontWeight:400,fontSize:'0.78rem',color:'#94a3b8'}}>(must match VEHICLE_ID in your ESP32 code)</span></label>
+                  <input type="text" placeholder="e.g. mritunjay" value={addForm.vehicle_id} onChange={e => setAdd('vehicle_id', e.target.value.toLowerCase().replace(/\s+/g,'_'))} />
+                </div>
                 <div className="form-group">
                   <label>Registration Number *</label>
                   <input type="text" placeholder="MH 12 AB 1234" value={addForm.reg} onChange={e => setAdd('reg', e.target.value)} />

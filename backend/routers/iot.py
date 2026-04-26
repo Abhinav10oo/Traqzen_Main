@@ -53,17 +53,20 @@ def ingest_iot_data(
         "satellites":    int(payload.get("satellites", 0)),
     }
 
+    # Only update vehicles that have been registered by an owner
+    vehicle_ref = db.collection("vehicles").document(vehicle_id)
+    if not vehicle_ref.get().exists:
+        raise HTTPException(status_code=404, detail=f"Vehicle '{vehicle_id}' is not registered. Add it from the dashboard first.")
+
     # Save reading to sensor_data subcollection
     db.collection("sensor_data").document(vehicle_id).collection("readings").add(reading)
 
-    # Update vehicle document with live status (creates it if missing)
-    db.collection("vehicles").document(vehicle_id).set({
-        "name":         "Hyundai Venue",
-        "vehicle_id":   vehicle_id,
+    # Update live status on the existing vehicle document
+    vehicle_ref.update({
         "status":       "active" if reading["speed"] > 2 else "idle",
         "last_seen":    ts,
         "last_reading": reading,
-    }, merge=True)
+    })
 
     # Run alert threshold checks
     check_and_create_alerts(vehicle_id, reading)
