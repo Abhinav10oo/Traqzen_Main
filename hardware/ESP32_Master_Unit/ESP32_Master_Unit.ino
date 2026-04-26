@@ -44,10 +44,8 @@ const char* SSID       = "Redmi Note 8 Pro";
 const char* PASS       = "oooooooo";
 
 // ── Backend ───────────────────────────────────────────────────────────────────
-// Run  ipconfig  on your laptop while connected to the hotspot
-// and set this to the "Wireless LAN IPv4 Address" you see.
-const char* SERVER_IP   = "192.168.243.83";   // ← update if laptop IP changes
-const int   SERVER_PORT = 8000;
+const char* SERVER_HOST = "traqzen-main.onrender.com";
+const int   SERVER_PORT = 443;
 const char* VEHICLE_ID  = "mritunjay";
 const char* API_KEY     = "OBD2_ESP32_KEY";
 
@@ -286,10 +284,8 @@ void sendToBackend() {
   String payload;
   serializeJson(doc, payload);
 
-  String url = "http://";
-  url += SERVER_IP;
-  url += ":";
-  url += SERVER_PORT;
+  String url = "https://";
+  url += SERVER_HOST;
   url += "/api/iot/data/";
   url += VEHICLE_ID;
   url += "?key=";
@@ -298,7 +294,7 @@ void sendToBackend() {
   Serial.printf("[HTTP] POST → %s\n[HTTP] Payload: %s\n", url.c_str(), payload.c_str());
 
   HTTPClient http;
-  http.begin(url);
+  http.begin(url, nullptr);  // nullptr = skip SSL cert verification (fine for IoT)
   http.addHeader("Content-Type", "application/json");
   lastHttpCode = http.POST(payload);
 
