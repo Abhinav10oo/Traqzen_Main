@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { seedFirestore } from '../utils/seedFirestore';
 import './AuthPages.css';
 
 function EyeIcon({ visible }) {
@@ -44,20 +43,6 @@ export default function Login() {
       } else {
         setError(`Login error: ${err.code || err.message}`);
       }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDemo = async () => {
-    setError('');
-    setLoading(true);
-    try {
-      await seedFirestore();
-      await login('owner@demo.com', 'demo1234');
-      navigate('/dashboard/overview');
-    } catch (err) {
-      setError(`Demo failed: ${err.code || err.message}`);
     } finally {
       setLoading(false);
     }
@@ -199,17 +184,6 @@ export default function Login() {
               Don't have an account? <Link to="/signup" className="auth-link">Create one</Link>
             </p>
 
-            <div className="demo-access">
-              <div className="demo-divider"><span>or try demo</span></div>
-              <button className="demo-btn" onClick={handleDemo} disabled={loading}>
-                {loading ? <span className="spinner-dark" /> : (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/>
-                  </svg>
-                )}
-                View Live Demo Dashboard
-              </button>
-            </div>
           </div>
         </div>
 
