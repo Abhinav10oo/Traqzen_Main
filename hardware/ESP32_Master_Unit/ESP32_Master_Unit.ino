@@ -24,6 +24,11 @@
  * Baud       : 115200
  * Partition  : Huge APP (3MB No OTA/1MB SPIFFS)
  * Libraries  : ArduinoJson, BluetoothSerial, WiFi, HTTPClient (all built-in)
+ *              WiFiManager by tzapu (install via Library Manager)
+ *
+ * WiFi Setup : On first boot (or after reset), ESP32 creates hotspot
+ *              "TelematicsHub-Setup" — connect from phone, pick WiFi network.
+ *              Hold BOOT button (GPIO 0) for 3s on startup to reset WiFi.
  *
  * Wiring:
  *   Master RX (GPIO 16) ← Slave TX (GPIO 17)
@@ -32,16 +37,14 @@
  */
 
 #include <WiFi.h>
+#include <WiFiManager.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <BluetoothSerial.h>
 
 // ── LED ───────────────────────────────────────────────────────────────────────
-#define LED_PIN 2
-
-// ── WiFi ──────────────────────────────────────────────────────────────────────
-const char* SSID       = "Redmi Note 8 Pro";
-const char* PASS       = "oooooooo";
+#define LED_PIN  2
+#define BOOT_PIN 0   // GPIO 0 = BOOT button — hold on startup to reset WiFi
 
 // ── Backend ───────────────────────────────────────────────────────────────────
 const char* SERVER_HOST = "traqzen-main.onrender.com";
@@ -133,25 +136,39 @@ void printStatus() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WiFi
+// WiFi via WiFiManager
 // ─────────────────────────────────────────────────────────────────────────────
 void connectWiFi() {
-  Serial.printf("[WiFi] Connecting to: %s\n", SSID);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(SSID, PASS);
-  int tries = 0;
-  while (WiFi.status() != WL_CONNECTED && tries++ < 20) {
-    delay(500);
-    Serial.print(".");
-    digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+  // Hold BOOT button (GPIO 0) at startup for 3 seconds to erase saved WiFi
+  pinMode(BOOT_PIN, INPUT_PULLUP);
+  delay(100);
+  if (digitalRead(BOOT_PIN) == LOW) {
+    Serial.println("[WiFi] BOOT held — erasing saved credentials...");
+    WiFiManager wm;
+    wm.resetSettings();
+    Serial.println("[WiFi] Credentials cleared. Release button to continue.");
+    delay(2000);
   }
-  Serial.println();
-  if (WiFi.status() == WL_CONNECTED) {
+
+  WiFiManager wm;
+  wm.setConfigPortalTimeout(180);  // close portal after 3 min if nobody connects
+  wm.setConnectTimeout(30);
+
+  // Fast-blink LED while portal is open
+  wm.setAPCallback([](WiFiManager* wm) {
+    Serial.println("[WiFi] Config portal open — connect to 'TelematicsHub-Setup'");
+    for (int i = 0; i < 10; i++) { digitalWrite(LED_PIN, HIGH); delay(100); digitalWrite(LED_PIN, LOW); delay(100); }
+  });
+
+  Serial.println("[WiFi] Starting WiFiManager...");
+  if (wm.autoConnect("TelematicsHub-Setup")) {
     Serial.printf("[WiFi] CONNECTED! IP: %s  RSSI: %d dBm\n",
       WiFi.localIP().toString().c_str(), WiFi.RSSI());
     blinkLED(2, 100, 100);
   } else {
-    Serial.println("[WiFi] FAILED — check SSID/password");
+    Serial.println("[WiFi] Config portal timed out — rebooting...");
+    delay(1000);
+    ESP.restart();
   }
 }
 
