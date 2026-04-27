@@ -139,15 +139,22 @@ void printStatus() {
 // WiFi via WiFiManager
 // ─────────────────────────────────────────────────────────────────────────────
 void connectWiFi() {
-  // Hold BOOT button (GPIO 0) at startup for 3 seconds to erase saved WiFi
+  // Hold BOOT button (GPIO 0) for 3 seconds after power-on to reset WiFi
   pinMode(BOOT_PIN, INPUT_PULLUP);
-  delay(100);
-  if (digitalRead(BOOT_PIN) == LOW) {
-    Serial.println("[WiFi] BOOT held — erasing saved credentials...");
-    WiFiManager wm;
-    wm.resetSettings();
-    Serial.println("[WiFi] Credentials cleared. Release button to continue.");
-    delay(2000);
+  Serial.println("[WiFi] Hold BOOT button for 3s to reset WiFi...");
+  int holdCount = 0;
+  for (int i = 0; i < 30; i++) {   // check for 3 seconds (30 x 100ms)
+    delay(100);
+    if (digitalRead(BOOT_PIN) == LOW) holdCount++;
+    else holdCount = 0;
+    if (holdCount >= 10) {          // held continuously for 1 second
+      Serial.println("[WiFi] BOOT held — erasing saved credentials...");
+      WiFiManager wm;
+      wm.resetSettings();
+      Serial.println("[WiFi] Credentials cleared!");
+      blinkLED(5, 100, 100);
+      break;
+    }
   }
 
   WiFiManager wm;
