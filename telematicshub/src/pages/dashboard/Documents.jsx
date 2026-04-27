@@ -3,6 +3,8 @@ import { useOutletContext } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link } from 'react-router-dom';
+import { doc, deleteDoc } from 'firebase/firestore';
+import { db } from '../../firebase';
 
 const statusColors = { valid: 'success', 'expiring-soon': 'warning', expired: 'danger' };
 const statusLabels = { valid: 'Valid', 'expiring-soon': 'Expiring Soon', expired: 'Expired' };
@@ -38,6 +40,19 @@ export default function Documents() {
   const { documents, vehicles } = useData();
   const [filter, setFilter] = useState('all');
   const [vehicleFilter, setVehicleFilter] = useState('all');
+  const [deletingId, setDeletingId] = useState(null);
+
+  async function handleDelete(docId) {
+    if (!window.confirm('Delete this document? This cannot be undone.')) return;
+    setDeletingId(docId);
+    try {
+      await deleteDoc(doc(db, 'documents', docId));
+    } catch (e) {
+      alert('Failed to delete: ' + e.message);
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   // Resolve driver's assigned vehicle by ID or reg, fallback to mritunjay
   const resolvedAssigned = (() => {
@@ -155,6 +170,14 @@ export default function Documents() {
                 {doc.status !== 'valid' && (
                   <Link to="/dashboard/upload" className="btn btn-primary btn-xs" style={{flex:1,justifyContent:'center'}}>Renew</Link>
                 )}
+                <button
+                  className="btn btn-ghost btn-xs"
+                  style={{flex:1, color:'#e74c3c'}}
+                  disabled={deletingId === (doc._docId || doc.id)}
+                  onClick={() => handleDelete(doc._docId || doc.id)}
+                >
+                  {deletingId === (doc._docId || doc.id) ? '⏳' : '🗑️ Delete'}
+                </button>
               </div>
             )}
           </div>
