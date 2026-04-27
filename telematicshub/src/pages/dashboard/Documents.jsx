@@ -7,6 +7,29 @@ import { Link } from 'react-router-dom';
 const statusColors = { valid: 'success', 'expiring-soon': 'warning', expired: 'danger' };
 const statusLabels = { valid: 'Valid', 'expiring-soon': 'Expiring Soon', expired: 'Expired' };
 
+function computeStatus(expiryDate) {
+  if (!expiryDate) return 'valid';
+  const diff = (new Date(expiryDate) - new Date()) / (1000 * 60 * 60 * 24);
+  if (diff < 0)  return 'expired';
+  if (diff < 30) return 'expiring-soon';
+  return 'valid';
+}
+
+function normalizeDoc(d) {
+  const expiry = d.expiry_date || d.expiryDate || '';
+  return {
+    ...d,
+    type:       d.document_type || d.type       || 'Document',
+    vehicleId:  d.vehicle_id    || d.vehicleId  || '',
+    vehicle:    d.vehicle_id    || d.vehicle     || '',
+    issuer:     d.issuer        || '',
+    issueDate:  d.issue_date    || d.issueDate   || '',
+    expiryDate: expiry,
+    status:     d.status        || computeStatus(expiry),
+    files:      d.files         || [],
+  };
+}
+
 export default function Documents() {
   const { view } = useOutletContext();
   const isOwner = view === 'owner';
@@ -28,10 +51,12 @@ export default function Documents() {
     return match ? (match._docId || match.id) : 'mritunjay';
   })();
 
+  const normalizedDocs = documents.map(normalizeDoc);
+
   // Drivers only see documents for their assigned vehicle
   const scopedDocuments = isOwner
-    ? documents
-    : documents.filter(d => d.vehicleId === resolvedAssigned);
+    ? normalizedDocs
+    : normalizedDocs.filter(d => d.vehicleId === resolvedAssigned);
 
   const filtered = scopedDocuments.filter(d => {
     const matchStatus  = filter === 'all' || d.status === filter;
@@ -119,8 +144,14 @@ export default function Documents() {
 
             {isOwner && (
               <div style={{display:'flex',gap:'8px',marginTop:'14px',paddingTop:'12px',borderTop:'1px solid rgba(42,142,158,0.1)'}}>
-                <button className="btn btn-ghost btn-xs" style={{flex:1}}>📄 View</button>
-                <button className="btn btn-ghost btn-xs" style={{flex:1}}>📥 Download</button>
+                {doc.files[0]?.url ? (
+                  <>
+                    <a href={doc.files[0].url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-xs" style={{flex:1,textAlign:'center'}}>📄 View</a>
+                    <a href={doc.files[0].url} download={doc.files[0].name || 'document'} className="btn btn-ghost btn-xs" style={{flex:1,textAlign:'center'}}>📥 Download</a>
+                  </>
+                ) : (
+                  <span style={{fontSize:'0.78rem',color:'var(--mid-gray)',flex:1}}>No file attached</span>
+                )}
                 {doc.status !== 'valid' && (
                   <Link to="/dashboard/upload" className="btn btn-primary btn-xs" style={{flex:1,justifyContent:'center'}}>Renew</Link>
                 )}
