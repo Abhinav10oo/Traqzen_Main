@@ -1,8 +1,11 @@
 """
-TelematicsHub — FastAPI Backend
-================================
+TelematicsHub — FastAPI Backend (Local / Offline Mode)
+======================================================
 Run with:  uvicorn main:app --reload --host 0.0.0.0 --port 8000
 Docs at:   http://localhost:8000/docs
+
+All data is stored in a local SQLite file (telematicshub.db).
+No Firebase or internet connection required.
 """
 import logging
 from contextlib import asynccontextmanager
@@ -12,10 +15,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from core.config import settings
-import core.firebase_admin  # noqa: F401 — initialises Firebase Admin SDK on import
+from core.database import init_db
 
-# ── Routers ──────────────────────────────────────────────────────────────────
-from routers import vehicles, sensor_data, alerts, documents, maintenance, trips, analytics, drivers, iot
+# ── Routers ───────────────────────────────────────────────────────────────────
+from routers import (
+    auth, vehicles, sensor_data, alerts, documents,
+    maintenance, trips, analytics, drivers, iot,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,63 +29,50 @@ logging.basicConfig(
 )
 logger = logging.getLogger("main")
 
-# ── Scheduler (document expiry checks) ───────────────────────────────────────
 scheduler = BackgroundScheduler()
-mqtt_client = None
 
 
 def run_document_expiry_check():
-    """Scheduled job: fire expiry alerts for documents."""
     from services.alert_service import check_document_expiry_alerts
     check_document_expiry_alerts()
     logger.info("Document expiry check completed")
 
 
-# ── Lifespan ──────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global mqtt_client
+    # Initialise SQLite (creates tables if missing)
+    init_db()
+    logger.info("SQLite database ready.")
 
-    # Start MQTT bridge
-    from mqtt.mqtt_handler import start_mqtt_client
-    mqtt_client = start_mqtt_client()
-
-    # Start scheduler
     scheduler.add_job(run_document_expiry_check, "interval", hours=24, id="doc_expiry")
     scheduler.start()
     logger.info("Scheduler started.")
 
-    yield  # ← app runs here
+    yield
 
-    # Shutdown
     scheduler.shutdown(wait=False)
-    if mqtt_client:
-        mqtt_client.loop_stop()
-        mqtt_client.disconnect()
     logger.info("Backend shutdown complete.")
 
 
-# ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="IoT-Based Smart Telematics System — REST API",
+    description="IoT-Based Smart Telematics System — Local Offline API",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
 )
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins_list,
+    allow_origins=["*"],   # local dev — all origins allowed
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ── Include routers ───────────────────────────────────────────────────────────
 PREFIX = "/api"
+app.include_router(auth.router,        prefix=PREFIX)
 app.include_router(vehicles.router,    prefix=PREFIX)
 app.include_router(sensor_data.router, prefix=PREFIX)
 app.include_router(alerts.router,      prefix=PREFIX)
@@ -91,20 +84,11 @@ app.include_router(drivers.router,     prefix=PREFIX)
 app.include_router(iot.router,         prefix=PREFIX)
 
 
-# ── Health check ──────────────────────────────────────────────────────────────
 @app.get("/health", tags=["Health"])
 def health():
-    return {
-        "status": "ok",
-        "app":     settings.APP_NAME,
-        "version": settings.APP_VERSION,
-    }
+    return {"status": "ok", "app": settings.APP_NAME, "version": settings.APP_VERSION, "mode": "local-sqlite"}
 
 
 @app.get("/", tags=["Root"])
 def root():
-    return {
-        "message": f"Welcome to {settings.APP_NAME} API",
-        "docs":    "/docs",
-        "health":  "/health",
-    }
+    return {"message": f"Welcome to {settings.APP_NAME} API (local mode)", "docs": "/docs"}

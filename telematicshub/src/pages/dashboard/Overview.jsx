@@ -1,7 +1,5 @@
 import { useOutletContext } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   AreaChart, Area, BarChart, Bar,
@@ -10,53 +8,51 @@ import {
 import { useData } from '../../contexts/DataContext';
 import './Overview.css';
 
-// ── Live OBD Panel (Firestore onSnapshot → dynamic vehicle) ─────────────────
+// ── Live OBD Panel (polls /api/iot/latest/{vehicleId} every 5 s) ────────────
 function LiveOBDPanel({ vehicleId }) {
-  const [obd, setObd]         = useState(null);
-  const [lastSeen, setLastSeen] = useState(null);
-  const [secAgo, setSecAgo]   = useState(0);
-  const [online, setOnline]   = useState(false);
+  const [obd, setObd]           = useState(null);
+  const [lastSeen, setLastSeen]  = useState(null);
+  const [secAgo, setSecAgo]     = useState(0);
+  const [online, setOnline]     = useState(false);
+  const pollRef                  = useRef(null);
 
-  // Real-time Firestore listener
   useEffect(() => {
     if (!vehicleId) return;
-    const unsub = onSnapshot(
-      doc(db, 'vehicles', vehicleId),
-      (snap) => {
-        if (snap.exists()) {
-          const d = snap.data();
-          const r = d.last_reading || {};
-          setObd({
-            rpm:           r.rpm           ?? 0,
-            speed:         r.speed         ?? 0,
-            temp:          r.temp          ?? 0,
-            fuel:          r.fuel          ?? 0,
-            engine_load:   r.engine_load   ?? 0,
-            throttle:      r.throttle      ?? 0,
-            intake_air:    r.intake_air    ?? 0,
-            battery:       r.battery       ?? 0,
-            alcohol_level: r.alcohol_level ?? 0,
-            mq3_voltage:   r.mq3_voltage   ?? 0,
-            gps_valid:     r.gps_valid     ?? false,
-            latitude:      r.lat           ?? 0,
-            longitude:     r.lng           ?? 0,
-            altitude:      r.altitude      ?? 0,
-            satellites:    r.satellites    ?? 0,
-            status:        d.status        ?? 'offline',
-          });
-          setLastSeen(new Date());
-          setOnline(true);
-        } else {
-          setOnline(false);
-        }
-      },
-      (err) => {
-        console.error('[LiveOBD] Firestore error:', err.code, err.message);
+
+    async function fetchLatest() {
+      try {
+        const base = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const res = await fetch(`${base}/api/iot/latest/${vehicleId}`);
+        if (!res.ok) { setOnline(false); return; }
+        const r = await res.json();
+        setObd({
+          rpm:           r.rpm           ?? 0,
+          speed:         r.speed         ?? 0,
+          temp:          r.temp          ?? 0,
+          fuel:          r.fuel          ?? 0,
+          engine_load:   r.engine_load   ?? 0,
+          throttle:      r.throttle      ?? 0,
+          intake_air:    r.intake_air    ?? 0,
+          battery:       r.battery       ?? 0,
+          alcohol_level: r.alcohol_level ?? 0,
+          mq3_voltage:   r.mq3_voltage   ?? 0,
+          gps_valid:     r.gps_valid     ?? false,
+          latitude:      r.lat           ?? 0,
+          longitude:     r.lng           ?? 0,
+          altitude:      r.altitude      ?? 0,
+          satellites:    r.satellites    ?? 0,
+        });
+        setLastSeen(new Date());
+        setOnline(true);
+      } catch {
         setOnline(false);
       }
-    );
-    return () => unsub();
-  }, []);
+    }
+
+    fetchLatest();
+    pollRef.current = setInterval(fetchLatest, 5000);
+    return () => clearInterval(pollRef.current);
+  }, [vehicleId]);
 
   // Seconds-since-last-update ticker
   useEffect(() => {
@@ -116,7 +112,7 @@ function LiveOBDPanel({ vehicleId }) {
               Hyundai Venue — Live OBD Feed
             </div>
             <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 1 }}>
-              ESP32 · BT MAC 00:10:CC:4F:36:03 · Auto-updates via Firestore
+              ESP32 · BT MAC 00:10:CC:4F:36:03 · Polling local backend every 5s
             </div>
           </div>
         </div>

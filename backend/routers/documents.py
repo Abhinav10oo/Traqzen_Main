@@ -1,12 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException
-from typing import Optional
+"""
+Document metadata — backed by SQLite.
+File uploads go directly to Cloudinary from the frontend; this router stores metadata only.
+"""
 from datetime import datetime, timezone
-from core.firebase_admin import db
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException
+
+from core.database import get_db
 from core.dependencies import get_current_user, get_current_owner
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
-# NOTE: File uploads now go directly to Firebase Storage from the frontend.
-# This router only handles document metadata stored in Firestore.
 
 
 @router.get("/")
@@ -14,68 +17,87 @@ def list_documents(
     vehicle_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
-    """List document metadata from Firestore."""
-    query = db.collection("documents")
+    sql    = "SELECT * FROM documents WHERE 1=1"
+    params: list = []
     if vehicle_id:
-        query = query.where("vehicle_id", "==", vehicle_id)
+        sql += " AND vehicle_id = ?"
+        params.append(vehicle_id)
+    sql += " ORDER BY created_at DESC"
 
-    result = []
-    for doc in query.stream():
-        data = doc.to_dict()
-        data["id"] = doc.id
-        result.append(data)
-    return result
+    conn = get_db()
+    try:
+        rows = conn.execute(sql, params).fetchall()
+    finally:
+        conn.close()
+    return [dict(r) for r in rows]
 
 
 @router.post("/", status_code=201)
-def save_document_metadata(
+def create_document(
     payload: dict,
-    current_user: dict = Depends(get_current_owner),
-):
-    """Save document metadata to Firestore after frontend uploads file to Firebase Storage."""
-    doc_data = {
-        **payload,
-        "uploaded_by": current_user.get("uid"),
-        "uploaded_at": datetime.now(timezone.utc).isoformat(),
-    }
-    doc_ref = db.collection("documents").add(doc_data)
-    return {"id": doc_ref[1].id, **doc_data}
-
-
-@router.get("/{doc_id}")
-def get_document(
-    doc_id: str,
     current_user: dict = Depends(get_current_user),
 ):
-    doc = db.collection("documents").document(doc_id).get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="Document not found")
-    data = doc.to_dict()
-    data["id"] = doc.id
-    return data
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            """INSERT INTO documents
+               (vehicle_id, document_type, document_number, expiry_date, file_url, status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (payload.get("vehicle_id", ""),
+             payload.get("document_type", ""),
+             payload.get("document_number", ""),
+             payload.get("expiry_date", ""),
+             payload.get("file_url", ""),
+             payload.get("status", "valid"),
+             now),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM documents WHERE id = ?", (cur.lastrowid,)).fetchone()
+    finally:
+        conn.close()
+    return dict(row)
 
 
 @router.put("/{doc_id}")
 def update_document(
-    doc_id: str,
+    doc_id: int,
     payload: dict,
-    current_user: dict = Depends(get_current_owner),
+    current_user: dict = Depends(get_current_user),
 ):
-    doc_ref = db.collection("documents").document(doc_id)
-    if not doc_ref.get().exists:
-        raise HTTPException(status_code=404, detail="Document not found")
-    doc_ref.update(payload)
-    updated = doc_ref.get().to_dict()
-    updated["id"] = doc_id
-    return updated
+    allowed = {"document_type", "document_number", "expiry_date", "file_url", "status"}
+    updates = {k: v for k, v in payload.items() if k in allowed}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No valid fields")
+
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id FROM documents WHERE id = ?", (doc_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Document not found")
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        conn.execute(
+            f"UPDATE documents SET {set_clause} WHERE id = ?",
+            [*updates.values(), doc_id],
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM documents WHERE id = ?", (doc_id,)).fetchone()
+    finally:
+        conn.close()
+    return dict(row)
 
 
 @router.delete("/{doc_id}", status_code=204)
 def delete_document(
-    doc_id: str,
+    doc_id: int,
     current_user: dict = Depends(get_current_owner),
 ):
-    doc_ref = db.collection("documents").document(doc_id)
-    if not doc_ref.get().exists:
-        raise HTTPException(status_code=404, detail="Document not found")
-    doc_ref.delete()
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id FROM documents WHERE id = ?", (doc_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Document not found")
+        conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
+        conn.commit()
+    finally:
+        conn.close()

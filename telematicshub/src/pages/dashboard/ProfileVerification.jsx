@@ -1,6 +1,4 @@
 import { useState, useRef, useEffect } from 'react';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { uploadToCloudinary } from '../../utils/cloudinary';
 import './ProfileVerification.css';
@@ -137,9 +135,7 @@ export default function ProfileVerification() {
       };
 
       const updatedDocs = { ...verificationDocs, [docKey]: docEntry };
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        [`verificationDocs.${docKey}`]: docEntry,
-      });
+      await updateProfile({ [`verificationDocs.${docKey}`]: docEntry });
       setVerificationDocs(updatedDocs);
       setDocMsg(prev => ({ ...prev, [docKey]: 'saved' }));
     } catch (err) {

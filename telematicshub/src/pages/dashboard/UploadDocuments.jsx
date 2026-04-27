@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
 import { uploadToCloudinary } from '../../utils/cloudinary';
@@ -70,18 +69,16 @@ export default function UploadDocuments() {
       }
       setProgress(100);
 
-      // Save metadata to Firestore
+      // Save metadata to local backend
       const docData = {
         vehicle_id:    form.vehicle,
         document_type: form.docType,
         issuer:        form.issuer,
         issue_date:    form.issueDate,
         expiry_date:   form.expiryDate,
-        files:         downloadURLs,
-        uploaded_by:   currentUser?.uid || '',
-        uploaded_at:   serverTimestamp(),
+        file_url:      downloadURLs[0]?.url || '',
       };
-      await addDoc(collection(db, 'documents'), docData);
+      await api.post('/api/documents/', docData);
 
       const entry = {
         id: Date.now(),

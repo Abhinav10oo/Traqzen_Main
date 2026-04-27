@@ -11,7 +11,7 @@
  *   Slave   → Alcohol level (MQ-3), GPS (lat/lng/alt/speed/sats)
  *
  * Sends:
- *   HTTP POST → FastAPI backend → Firestore → React Dashboard
+ *   HTTP POST → FastAPI backend (local SQLite) → React Dashboard (polling)
  *
  * LED Blink Codes (GPIO 2):
  *   Fast blink = connecting WiFi
@@ -40,6 +40,7 @@
 #include <WiFiManager.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <time.h>
 #include <BluetoothSerial.h>
 
 // ── LED ───────────────────────────────────────────────────────────────────────
@@ -47,9 +48,11 @@
 #define BOOT_PIN 0   // GPIO 0 = BOOT button — hold on startup to reset WiFi
 
 // ── Backend ───────────────────────────────────────────────────────────────────
-const char* SERVER_HOST = "traqzen-main.onrender.com";
-const int   SERVER_PORT = 443;
-const char* VEHICLE_ID  = "mritunjay";
+// UPDATE SERVER_HOST to the IPv4 address of the PC running the FastAPI backend.
+// Run `ipconfig` (Windows) or `hostname -I` (Linux) on that PC to find it.
+const char* SERVER_HOST = "192.168.1.37";   // <-- your PC's local IP
+const int   SERVER_PORT = 8000;
+const char* VEHICLE_ID  = "mritunjay";      // must match the vehicle_id registered in the dashboard
 const char* API_KEY     = "OBD2_ESP32_KEY";
 
 // ── UART from Slave ───────────────────────────────────────────────────────────
@@ -91,7 +94,7 @@ unsigned long lastHTTP        = 0;
 unsigned long lastOBD         = 0;
 unsigned long lastStatus      = 0;
 unsigned long lastBTRetry     = 0;
-const unsigned long HTTP_INTERVAL   = 5000;
+const unsigned long HTTP_INTERVAL   = 10000;  // 10s — local backend, no cloud latency
 const unsigned long OBD_INTERVAL    = 1000;
 const unsigned long STATUS_INTERVAL = 3000;
 const unsigned long BT_RETRY_INTERVAL = 15000;  // retry BT every 15s, not every 1s
@@ -308,29 +311,35 @@ void sendToBackend() {
   String payload;
   serializeJson(doc, payload);
 
-  String url = "https://";
-  url += SERVER_HOST;
-  url += "/api/iot/data/";
-  url += VEHICLE_ID;
-  url += "?key=";
-  url += API_KEY;
+  String path = "/api/iot/data/";
+  path += VEHICLE_ID;
+  path += "?key=";
+  path += API_KEY;
 
-  Serial.printf("[HTTP] POST → %s\n[HTTP] Payload: %s\n", url.c_str(), payload.c_str());
+  String url = "http://";
+  url += SERVER_HOST;
+  url += ":";
+  url += SERVER_PORT;
+  url += path;
+
+  Serial.printf("[HTTP] POST -> %s\n", url.c_str());
 
   HTTPClient http;
-  http.begin(url, nullptr);  // nullptr = skip SSL cert verification (fine for IoT)
+  http.begin(url);
+  http.setTimeout(8000);
   http.addHeader("Content-Type", "application/json");
   lastHttpCode = http.POST(payload);
+  http.end();
 
-  if (lastHttpCode == 201) {
+  if (lastHttpCode == 201 || lastHttpCode == 200) {
     totalSent++;
-    Serial.printf("[HTTP] SUCCESS (201) — total sent: %lu\n", totalSent);
+    Serial.printf("[HTTP] SUCCESS (%d) — total sent: %lu\n", lastHttpCode, totalSent);
+    lastHttpCode = 201;
     blinkLED(1, 500, 0);
   } else {
     Serial.printf("[HTTP] FAILED — code: %d\n", lastHttpCode);
     blinkLED(5, 50, 50);
   }
-  http.end();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -352,6 +361,20 @@ void setup() {
 
   // WiFi
   connectWiFi();
+
+  // NTP time sync — required for TLS certificate validation
+  Serial.println("[NTP] Syncing time...");
+  configTime(19800, 0, "pool.ntp.org", "time.nist.gov");  // IST = UTC+5:30
+  struct tm t;
+  int ntpTries = 0;
+  while (!getLocalTime(&t) && ntpTries++ < 20) { delay(500); Serial.print("."); }
+  Serial.println();
+  if (ntpTries < 20) {
+    Serial.printf("[NTP] Time synced: %04d-%02d-%02d %02d:%02d:%02d\n",
+      t.tm_year+1900, t.tm_mon+1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+  } else {
+    Serial.println("[NTP] Sync failed — continuing anyway");
+  }
 
   // Bluetooth ELM327
   Serial.println("[BT] Starting Bluetooth Master...");

@@ -1,12 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged,
-} from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+import { api, getToken, setToken, clearToken, getStoredUser, storeUser } from '../lib/api';
 
 const AuthContext = createContext(null);
 
@@ -16,81 +9,77 @@ export function AuthProvider({ children }) {
   const [userProfile,  setUserProfile]  = useState(null);
   const [authLoading,  setAuthLoading]  = useState(true);
 
-  // Listen to Firebase auth state changes
+  // Rehydrate session from localStorage on page load
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setCurrentUser(user);
-        try {
-          const snap = await getDoc(doc(db, 'users', user.uid));
-          if (snap.exists()) {
-            const profile = snap.data();
-            setUserRole(profile.role || 'owner');
-            setUserProfile(profile);
-          }
-        } catch {
+    const token = getToken();
+    const stored = getStoredUser();
+    if (token && stored) {
+      setCurrentUser({ uid: stored.uid, email: stored.email });
+      setUserRole(stored.role || 'owner');
+      setUserProfile(stored);
+      // Refresh profile from server in background
+      api.get('/api/auth/me')
+        .then(profile => {
+          storeUser(profile);
+          setCurrentUser({ uid: profile.uid, email: profile.email });
+          setUserRole(profile.role || 'owner');
+          setUserProfile(profile);
+        })
+        .catch(() => {
+          // Token expired — clear session
+          clearToken();
+          setCurrentUser(null);
           setUserRole('owner');
           setUserProfile(null);
-        }
-      } else {
-        setCurrentUser(null);
-        setUserRole('owner');
-        setUserProfile(null);
-      }
+        })
+        .finally(() => setAuthLoading(false));
+    } else {
       setAuthLoading(false);
-    });
-    return unsubscribe;
+    }
   }, []);
 
-  // Sign in with email + password
   async function login(email, password) {
-    const cred = await signInWithEmailAndPassword(auth, email, password);
-    try {
-      const snap = await getDoc(doc(db, 'users', cred.user.uid));
-      const profile = snap.exists() ? snap.data() : {};
-      const role = profile.role || 'owner';
-      setUserRole(role);
-      setUserProfile(profile);
-      return { user: cred.user, role };
-    } catch {
-      // Profile fetch failed (Firestore rules) — login still succeeds
-      setUserRole('owner');
-      setUserProfile(null);
-      return { user: cred.user, role: 'owner' };
-    }
+    const data = await api.post('/api/auth/login', { email, password });
+    setToken(data.token);
+    storeUser(data);
+    setCurrentUser({ uid: data.uid, email: data.email });
+    setUserRole(data.role || 'owner');
+    setUserProfile(data);
+    return { user: { uid: data.uid, email: data.email }, role: data.role };
   }
 
-  // Create account + save profile to Firestore
   async function signup(firstName, lastName, email, phone, password, role, assignedVehicle = '') {
-    const cred = await createUserWithEmailAndPassword(auth, email, password);
-    const name = `${firstName} ${lastName}`.trim();
-    const profile = { firstName, lastName, name, email, phone, role, createdAt: serverTimestamp(),
-      ...(role === 'driver' && assignedVehicle ? { assignedVehicle: assignedVehicle.trim() } : {}) };
-    try {
-      await setDoc(doc(db, 'users', cred.user.uid), profile);
-    } catch {
-      // Firestore rules blocked profile save — auth still succeeded
-    }
-    setUserRole(role);
-    setUserProfile(profile);
-    return cred.user;
+    const data = await api.post('/api/auth/signup', {
+      firstName, lastName, email, phone, password, role,
+      assignedVehicle: role === 'driver' ? assignedVehicle.trim() : '',
+    });
+    setToken(data.token);
+    storeUser(data);
+    setCurrentUser({ uid: data.uid, email: data.email });
+    setUserRole(data.role || 'owner');
+    setUserProfile(data);
+    return { uid: data.uid, email: data.email };
   }
 
-  // Update user profile in Firestore and local state
   async function updateProfile(updates) {
     if (!currentUser) return;
-    const { doc: firestoreDoc, updateDoc } = await import('firebase/firestore');
-    await updateDoc(firestoreDoc(db, 'users', currentUser.uid), updates);
-    setUserProfile(prev => ({ ...prev, ...updates }));
+    const profile = await api.put('/api/auth/me', updates);
+    storeUser(profile);
+    setUserProfile(profile);
   }
 
-  // Sign out
   function logout() {
-    return signOut(auth);
+    clearToken();
+    setCurrentUser(null);
+    setUserRole('owner');
+    setUserProfile(null);
   }
 
   return (
-    <AuthContext.Provider value={{ currentUser, userRole, userProfile, authLoading, login, signup, logout, updateProfile }}>
+    <AuthContext.Provider value={{
+      currentUser, userRole, userProfile, authLoading,
+      login, signup, logout, updateProfile,
+    }}>
       {children}
     </AuthContext.Provider>
   );

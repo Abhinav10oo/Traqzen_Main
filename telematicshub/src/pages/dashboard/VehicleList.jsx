@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { api } from '../../lib/api';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import './VehicleList.css';
@@ -30,8 +29,8 @@ function EditVehicleModal({ vehicle, onClose, onSaved }) {
     setSaving(true);
     setError('');
     try {
-      await updateDoc(doc(db, 'vehicles', vehicle._docId || vehicle.id), {
-        reg:         form.reg,
+      await api.put(`/api/vehicles/${vehicle._docId || vehicle.id}`, {
+        registration_number: form.reg,
         model:       form.model,
         year:        Number(form.year),
         type:        form.type,
@@ -347,7 +346,7 @@ export default function VehicleList() {
     if (!window.confirm('Delete this vehicle? This cannot be undone.')) return;
     setDeletingId(vehicleId);
     try {
-      await deleteDoc(doc(db, 'vehicles', vehicleId));
+      await api.delete(`/api/vehicles/${vehicleId}`);
     } catch (err) {
       alert('Failed to delete: ' + err.message);
     } finally {
@@ -363,20 +362,16 @@ export default function VehicleList() {
     setAddError('');
     try {
       const id = addForm.vehicle_id.trim().toLowerCase().replace(/\s+/g, '_');
-      await setDoc(doc(db, 'vehicles', id), {
-        vehicle_id:  id,
-        owner_uid:   currentUser.uid,
-        reg:         addForm.reg.trim(),
-        model:       addForm.model.trim(),
-        year:        Number(addForm.year) || new Date().getFullYear(),
-        type:        addForm.type,
-        driver:      addForm.driver.trim(),
-        insurance:   addForm.insurance,
-        pollution:   addForm.pollution,
-        lastService: addForm.lastService,
-        status:      'offline',
-        fuel:        0, temp: 0, speed: 0, odometer: 0,
-        lat: 0, lng: 0,
+      await api.post('/api/vehicles/', {
+        vehicle_id:          id,
+        registration_number: addForm.reg.trim(),
+        model:               addForm.model.trim(),
+        year:                Number(addForm.year) || new Date().getFullYear(),
+        type:                addForm.type,
+        driver:              addForm.driver.trim(),
+        insurance:           addForm.insurance,
+        pollution:           addForm.pollution,
+        lastService:         addForm.lastService,
       });
       setAddForm({ vehicle_id:'', reg:'', model:'', year:'', type:'SUV', driver:'', insurance:'', pollution:'', lastService:'' });
       setShowAddModal(false);

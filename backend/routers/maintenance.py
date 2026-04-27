@@ -1,7 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
-from typing import Optional
+"""
+Maintenance records — backed by SQLite.
+"""
 from datetime import datetime, timezone
-from core.firebase_admin import db
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException
+
+from core.database import get_db
 from core.dependencies import get_current_user, get_current_owner
 
 router = APIRouter(prefix="/maintenance", tags=["Maintenance"])
@@ -10,22 +14,21 @@ router = APIRouter(prefix="/maintenance", tags=["Maintenance"])
 @router.get("/")
 def list_maintenance(
     vehicle_id: Optional[str] = None,
-    status: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
-    """List maintenance records from Firestore."""
-    query = db.collection("maintenance")
+    sql    = "SELECT * FROM maintenance WHERE 1=1"
+    params: list = []
     if vehicle_id:
-        query = query.where("vehicle_id", "==", vehicle_id)
-    if status:
-        query = query.where("status", "==", status)
+        sql += " AND vehicle_id = ?"
+        params.append(vehicle_id)
+    sql += " ORDER BY date DESC"
 
-    result = []
-    for doc in query.stream():
-        data = doc.to_dict()
-        data["id"] = doc.id
-        result.append(data)
-    return result
+    conn = get_db()
+    try:
+        rows = conn.execute(sql, params).fetchall()
+    finally:
+        conn.close()
+    return [dict(r) for r in rows]
 
 
 @router.post("/", status_code=201)
@@ -33,72 +36,68 @@ def create_maintenance(
     payload: dict,
     current_user: dict = Depends(get_current_owner),
 ):
-    """Create a maintenance record in Firestore."""
-    task_data = {
-        **payload,
-        "created_by": current_user.get("uid"),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "status": payload.get("status", "upcoming"),
-    }
-    doc_ref = db.collection("maintenance").add(task_data)
-    return {"id": doc_ref[1].id, **task_data}
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            """INSERT INTO maintenance
+               (vehicle_id, service_type, description, date, cost, odometer, next_service_date, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (payload.get("vehicle_id", ""),
+             payload.get("service_type", ""),
+             payload.get("description", ""),
+             payload.get("date", ""),
+             float(payload.get("cost", 0)),
+             float(payload.get("odometer", 0)),
+             payload.get("next_service_date", ""),
+             now),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM maintenance WHERE id = ?", (cur.lastrowid,)).fetchone()
+    finally:
+        conn.close()
+    return dict(row)
 
 
-@router.get("/{task_id}")
-def get_maintenance(
-    task_id: str,
-    current_user: dict = Depends(get_current_user),
-):
-    doc = db.collection("maintenance").document(task_id).get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="Maintenance task not found")
-    data = doc.to_dict()
-    data["id"] = doc.id
-    return data
-
-
-@router.put("/{task_id}")
+@router.put("/{record_id}")
 def update_maintenance(
-    task_id: str,
+    record_id: int,
     payload: dict,
     current_user: dict = Depends(get_current_owner),
 ):
-    doc_ref = db.collection("maintenance").document(task_id)
-    if not doc_ref.get().exists:
-        raise HTTPException(status_code=404, detail="Maintenance task not found")
-    doc_ref.update(payload)
-    updated = doc_ref.get().to_dict()
-    updated["id"] = task_id
-    return updated
+    allowed = {"service_type", "description", "date", "cost", "odometer", "next_service_date"}
+    updates = {k: v for k, v in payload.items() if k in allowed}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No valid fields")
+
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id FROM maintenance WHERE id = ?", (record_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Record not found")
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        conn.execute(
+            f"UPDATE maintenance SET {set_clause} WHERE id = ?",
+            [*updates.values(), record_id],
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM maintenance WHERE id = ?", (record_id,)).fetchone()
+    finally:
+        conn.close()
+    return dict(row)
 
 
-@router.patch("/{task_id}/complete")
-def complete_maintenance(
-    task_id: str,
-    payload: dict = {},
-    current_user: dict = Depends(get_current_owner),
-):
-    """Mark a maintenance task as completed."""
-    doc_ref = db.collection("maintenance").document(task_id)
-    if not doc_ref.get().exists:
-        raise HTTPException(status_code=404, detail="Maintenance task not found")
-    doc_ref.update({
-        **payload,
-        "status": "completed",
-        "completed_at": datetime.now(timezone.utc).isoformat(),
-        "completed_by": current_user.get("uid"),
-    })
-    updated = doc_ref.get().to_dict()
-    updated["id"] = task_id
-    return updated
-
-
-@router.delete("/{task_id}", status_code=204)
+@router.delete("/{record_id}", status_code=204)
 def delete_maintenance(
-    task_id: str,
+    record_id: int,
     current_user: dict = Depends(get_current_owner),
 ):
-    doc_ref = db.collection("maintenance").document(task_id)
-    if not doc_ref.get().exists:
-        raise HTTPException(status_code=404, detail="Maintenance task not found")
-    doc_ref.delete()
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id FROM maintenance WHERE id = ?", (record_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Record not found")
+        conn.execute("DELETE FROM maintenance WHERE id = ?", (record_id,))
+        conn.commit()
+    finally:
+        conn.close()

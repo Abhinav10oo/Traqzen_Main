@@ -1,32 +1,27 @@
+"""
+Request dependencies — JWT-based auth replacing Firebase Auth.
+"""
 from fastapi import HTTPException, Header, Depends
-from firebase_admin import auth as fa
-from core.firebase_admin import db as firestore_db
+from jose import JWTError
+from core.auth import decode_token
 
 
 async def get_current_user(authorization: str = Header(...)) -> dict:
-    """
-    Verify Firebase ID Token sent from frontend.
-    Frontend must send: Authorization: Bearer <Firebase ID Token>
-    Returns the decoded token dict which contains uid, email, etc.
-    """
+    """Verify JWT sent from frontend. Returns the decoded token dict (uid, email, role)."""
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid auth header format")
-
     token = authorization.split("Bearer ")[1]
-
     try:
-        decoded = fa.verify_id_token(token)
-        return decoded
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired Firebase token")
+        payload = decode_token(token)
+        if not payload.get("uid"):
+            raise HTTPException(status_code=401, detail="Invalid token payload")
+        return payload
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
 async def get_current_owner(current_user: dict = Depends(get_current_user)) -> dict:
-    """Require the current user to have the 'owner' role in Firestore."""
-    uid = current_user.get("uid")
-    if not uid:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    doc = firestore_db.collection("users").document(uid).get()
-    if not doc.exists or doc.to_dict().get("role") != "owner":
+    """Require the current user to have the 'owner' role."""
+    if current_user.get("role") != "owner":
         raise HTTPException(status_code=403, detail="Owner access required")
     return current_user

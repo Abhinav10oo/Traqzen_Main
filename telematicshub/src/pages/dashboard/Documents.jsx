@@ -3,8 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link } from 'react-router-dom';
-import { doc, deleteDoc } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { api } from '../../lib/api';
 
 const statusColors = { valid: 'success', 'expiring-soon': 'warning', expired: 'danger' };
 const statusLabels = { valid: 'Valid', 'expiring-soon': 'Expiring Soon', expired: 'Expired' };
@@ -46,7 +45,7 @@ export default function Documents() {
     if (!window.confirm('Delete this document? This cannot be undone.')) return;
     setDeletingId(docId);
     try {
-      await deleteDoc(doc(db, 'documents', docId));
+      await api.delete(`/api/documents/${docId}`);
     } catch (e) {
       alert('Failed to delete: ' + e.message);
     } finally {
