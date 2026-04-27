@@ -87,7 +87,7 @@ export function DataProvider({ children }) {
       if (vehiclesUnsub) vehiclesUnsub();
       if (alertsUnsub)   alertsUnsub();
     };
-  }, []);
+  }, [currentUser]);
 
   return (
     <DataContext.Provider value={{
