@@ -27,13 +27,11 @@ export default function DashNavbar({ sidebarOpen, setSidebarOpen, view }) {
     : 'U';
 
   const [profileOpen, setProfileOpen]   = useState(false);
-  const [viewOpen,    setViewOpen]      = useState(false);
   const [notifOpen,   setNotifOpen]     = useState(false);
   const [searchVal,   setSearchVal]     = useState('');
   const [readIds,     setReadIds]       = useState(new Set());
 
   const profileRef = useRef(null);
-  const viewRef    = useRef(null);
   const notifRef   = useRef(null);
   const seenRef    = useRef(new Set(JSON.parse(localStorage.getItem('seen_alert_ids') || '[]')));
 
@@ -41,7 +39,6 @@ export default function DashNavbar({ sidebarOpen, setSidebarOpen, view }) {
   useEffect(() => {
     const handler = (e) => {
       if (profileRef.current && !profileRef.current.contains(e.target)) setProfileOpen(false);
-      if (viewRef.current    && !viewRef.current.contains(e.target))    setViewOpen(false);
       if (notifRef.current   && !notifRef.current.contains(e.target))   setNotifOpen(false);
     };
     document.addEventListener('mousedown', handler);
@@ -118,27 +115,10 @@ export default function DashNavbar({ sidebarOpen, setSidebarOpen, view }) {
       {/* Right */}
       <div className="dash-nav-right">
 
-        {/* View dropdown */}
-        <div className="nav-dropdown-wrap" ref={viewRef}>
-          <button className="nav-view-btn" onClick={() => setViewOpen(!viewOpen)}>
-            <span className="view-icon">{view === 'owner' ? '👑' : '🚗'}</span>
-            <span>{view === 'owner' ? 'Owner View' : 'Driver View'}</span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-          {viewOpen && (
-            <div className="nav-dropdown">
-              <div className={`nav-dd-item ${view === 'owner' ? 'active' : ''}`}>
-                <span>👑</span> Owner / Admin View
-                {view === 'owner' && <span className="dd-check">✓</span>}
-              </div>
-              <div className={`nav-dd-item ${view === 'driver' ? 'active' : ''}`}>
-                <span>🚗</span> Driver View
-                {view === 'driver' && <span className="dd-check">✓</span>}
-              </div>
-            </div>
-          )}
+        {/* Role badge */}
+        <div className="nav-view-btn" style={{ cursor: 'default', pointerEvents: 'none' }}>
+          <span className="view-icon">{view === 'owner' ? '👑' : '🚗'}</span>
+          <span>{view === 'owner' ? 'Owner / Admin' : 'Driver'}</span>
         </div>
 
         {/* ── Notification Bell ── */}
