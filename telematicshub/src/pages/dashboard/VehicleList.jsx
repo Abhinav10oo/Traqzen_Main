@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
-import { doc, updateDoc, setDoc } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -338,8 +338,22 @@ export default function VehicleList() {
   const [addForm,      setAddForm]      = useState({ vehicle_id:'', reg:'', model:'', year:'', type:'SUV', driver:'', insurance:'', pollution:'', lastService:'' });
   const [addSaving,    setAddSaving]    = useState(false);
   const [addError,     setAddError]     = useState('');
+  const [deletingId,   setDeletingId]   = useState(null);
 
   const setAdd = (k, v) => setAddForm(f => ({ ...f, [k]: v }));
+
+  async function handleDeleteVehicle(e, vehicleId) {
+    e.stopPropagation();
+    if (!window.confirm('Delete this vehicle? This cannot be undone.')) return;
+    setDeletingId(vehicleId);
+    try {
+      await deleteDoc(doc(db, 'vehicles', vehicleId));
+    } catch (err) {
+      alert('Failed to delete: ' + err.message);
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   async function handleAddVehicle() {
     if (!addForm.vehicle_id.trim()) { setAddError('Device ID is required — must match the vehicle_id in your ESP32 code.'); return; }
@@ -467,6 +481,16 @@ export default function VehicleList() {
               <span className="vc-speed">{(v.speed||0) > 0 ? `🟢 ${v.speed} km/h` : '⚪ Stopped'}</span>
               <span className="vc-odo">📍 {(v.odometer || 0).toLocaleString()} km</span>
             </div>
+            {isOwner && (
+              <button
+                className="btn btn-ghost btn-xs"
+                style={{width:'100%',marginTop:'10px',color:'#e74c3c',borderColor:'rgba(231,76,60,0.3)'}}
+                disabled={deletingId === (v._docId || v.id)}
+                onClick={e => handleDeleteVehicle(e, v._docId || v.id)}
+              >
+                {deletingId === (v._docId || v.id) ? '⏳ Deleting…' : '🗑️ Delete Vehicle'}
+              </button>
+            )}
           </div>
         ))}
       </div>
