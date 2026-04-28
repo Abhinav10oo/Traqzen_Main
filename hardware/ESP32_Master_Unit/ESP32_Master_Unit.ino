@@ -11,7 +11,7 @@
  *   Slave   → Alcohol level (MQ-3), GPS (lat/lng/alt/speed/sats)
  *
  * Sends:
- *   HTTP POST → FastAPI backend (local SQLite) → React Dashboard (polling)
+ *   HTTP POST → FastAPI backend (local SQLite) → React Dashboard
  *
  * LED Blink Codes (GPIO 2):
  *   Fast blink = connecting WiFi
@@ -24,11 +24,6 @@
  * Baud       : 115200
  * Partition  : Huge APP (3MB No OTA/1MB SPIFFS)
  * Libraries  : ArduinoJson, BluetoothSerial, WiFi, HTTPClient (all built-in)
- *              WiFiManager by tzapu (install via Library Manager)
- *
- * WiFi Setup : On first boot (or after reset), ESP32 creates hotspot
- *              "TelematicsHub-Setup" — connect from phone, pick WiFi network.
- *              Hold BOOT button (GPIO 0) for 3s on startup to reset WiFi.
  *
  * Wiring:
  *   Master RX (GPIO 16) ← Slave TX (GPIO 17)
@@ -37,32 +32,33 @@
  */
 
 #include <WiFi.h>
-#include <WiFiManager.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
-#include <time.h>
 #include <BluetoothSerial.h>
 
 // ── LED ───────────────────────────────────────────────────────────────────────
-#define LED_PIN  2
-#define BOOT_PIN 0   // GPIO 0 = BOOT button — hold on startup to reset WiFi
+#define LED_PIN 2
+
+// ── WiFi ──────────────────────────────────────────────────────────────────────
+const char* SSID = "Redmi_Note_8_Pro";
+const char* PASS = "qwert93354";
 
 // ── Backend ───────────────────────────────────────────────────────────────────
-// UPDATE SERVER_HOST to the IPv4 address of the PC running the FastAPI backend.
-// Run `ipconfig` (Windows) or `hostname -I` (Linux) on that PC to find it.
-const char* SERVER_HOST = "192.168.1.37";   // <-- your PC's local IP
+// Run  ipconfig  on your laptop while connected to the Redmi hotspot
+// and set this to the "Wireless LAN IPv4 Address" you see.
+const char* SERVER_IP  = "192.168.82.83";  // <- your PC's IP on Redmi hotspot
 const int   SERVER_PORT = 8000;
-const char* VEHICLE_ID  = "mritunjay";      // must match the vehicle_id registered in the dashboard
+const char* VEHICLE_ID  = "mritunjay";
 const char* API_KEY     = "OBD2_ESP32_KEY";
 
 // ── UART from Slave ───────────────────────────────────────────────────────────
 #define UART_RX 16
 #define UART_TX 17
-HardwareSerial SensorSerial(2);   // UART2
+HardwareSerial SensorSerial(2);
 
 // ── ELM327 Bluetooth ──────────────────────────────────────────────────────────
 BluetoothSerial ELM327;
-uint8_t ELM_MAC[6] = {0x00, 0x10, 0xCC, 0x4F, 0x36, 0x03};  // your OBD adapter
+uint8_t ELM_MAC[6] = {0x00, 0x10, 0xCC, 0x4F, 0x36, 0x03};
 
 // ── OBD Data ──────────────────────────────────────────────────────────────────
 int   rpm          = 0;
@@ -72,7 +68,7 @@ float engine_load  = 0.0;
 int   coolant_temp = 0;
 float battery_v    = 0.0;
 
-// ── Sensor Data (from Slave) ───────────────────────────────────────────────────
+// ── Sensor Data (from Slave) ──────────────────────────────────────────────────
 int   mq3_raw      = 0;
 float mq3_voltage  = 0.0;
 int   alcohol_lvl  = 0;
@@ -90,14 +86,14 @@ int  lastHttpCode   = 0;
 unsigned long totalSent = 0;
 
 // ── Timing ────────────────────────────────────────────────────────────────────
-unsigned long lastHTTP        = 0;
-unsigned long lastOBD         = 0;
-unsigned long lastStatus      = 0;
-unsigned long lastBTRetry     = 0;
-const unsigned long HTTP_INTERVAL   = 10000;  // 10s — local backend, no cloud latency
-const unsigned long OBD_INTERVAL    = 1000;
-const unsigned long STATUS_INTERVAL = 3000;
-const unsigned long BT_RETRY_INTERVAL = 15000;  // retry BT every 15s, not every 1s
+unsigned long lastHTTP    = 0;
+unsigned long lastOBD     = 0;
+unsigned long lastStatus  = 0;
+unsigned long lastBTRetry = 0;
+const unsigned long HTTP_INTERVAL     = 5000;
+const unsigned long OBD_INTERVAL      = 1000;
+const unsigned long STATUS_INTERVAL   = 3000;
+const unsigned long BT_RETRY_INTERVAL = 15000;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LED
@@ -139,46 +135,25 @@ void printStatus() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WiFi via WiFiManager
+// WiFi
 // ─────────────────────────────────────────────────────────────────────────────
 void connectWiFi() {
-  // Hold BOOT button (GPIO 0) for 3 seconds after power-on to reset WiFi
-  pinMode(BOOT_PIN, INPUT_PULLUP);
-  Serial.println("[WiFi] Hold BOOT button for 3s to reset WiFi...");
-  int holdCount = 0;
-  for (int i = 0; i < 30; i++) {   // check for 3 seconds (30 x 100ms)
-    delay(100);
-    if (digitalRead(BOOT_PIN) == LOW) holdCount++;
-    else holdCount = 0;
-    if (holdCount >= 10) {          // held continuously for 1 second
-      Serial.println("[WiFi] BOOT held — erasing saved credentials...");
-      WiFiManager wm;
-      wm.resetSettings();
-      Serial.println("[WiFi] Credentials cleared!");
-      blinkLED(5, 100, 100);
-      break;
-    }
+  Serial.printf("[WiFi] Connecting to: %s\n", SSID);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(SSID, PASS);
+  int tries = 0;
+  while (WiFi.status() != WL_CONNECTED && tries++ < 20) {
+    delay(500);
+    Serial.print(".");
+    digitalWrite(LED_PIN, !digitalRead(LED_PIN));
   }
-
-  WiFiManager wm;
-  wm.setConfigPortalTimeout(180);  // close portal after 3 min if nobody connects
-  wm.setConnectTimeout(30);
-
-  // Fast-blink LED while portal is open
-  wm.setAPCallback([](WiFiManager* wm) {
-    Serial.println("[WiFi] Config portal open — connect to 'TelematicsHub-Setup'");
-    for (int i = 0; i < 10; i++) { digitalWrite(LED_PIN, HIGH); delay(100); digitalWrite(LED_PIN, LOW); delay(100); }
-  });
-
-  Serial.println("[WiFi] Starting WiFiManager...");
-  if (wm.autoConnect("TelematicsHub-Setup")) {
+  Serial.println();
+  if (WiFi.status() == WL_CONNECTED) {
     Serial.printf("[WiFi] CONNECTED! IP: %s  RSSI: %d dBm\n",
       WiFi.localIP().toString().c_str(), WiFi.RSSI());
     blinkLED(2, 100, 100);
   } else {
-    Serial.println("[WiFi] Config portal timed out — rebooting...");
-    delay(1000);
-    ESP.restart();
+    Serial.println("[WiFi] FAILED — check SSID/password");
   }
 }
 
@@ -189,13 +164,11 @@ void receiveSensorData() {
   if (!SensorSerial.available()) return;
   String json = SensorSerial.readStringUntil('\n');
   json.trim();
-  // Must start with { and end with } to be a valid JSON object
   if (json.length() < 5 || json[0] != '{' || json[json.length()-1] != '}') return;
 
   JsonDocument doc;
-  if (deserializeJson(doc, json)) {
-    return;  // silently skip malformed packets
-  }
+  if (deserializeJson(doc, json)) return;
+
   mq3_raw     = doc["mq3_raw"]       | 0;
   mq3_voltage = doc["mq3_voltage"]   | 0.0f;
   alcohol_lvl = doc["alcohol_level"] | 0;
@@ -262,7 +235,6 @@ void readOBDData() {
   r = elmQuery("0104"); if (extractBytes(r, a, b)) engine_load  = (a * 100.0) / 255.0;
   r = elmQuery("0105"); if (extractBytes(r, a, b)) coolant_temp = a - 40;
 
-  // Read battery voltage via ELM327 AT RV command
   ELM327.print("AT RV\r");
   String rv = "";
   unsigned long t = millis();
@@ -274,7 +246,6 @@ void readOBDData() {
     }
   }
   rv.trim();
-  // Response looks like "12.4V" — strip the V and parse
   rv.replace("V", ""); rv.replace("\r", ""); rv.replace("\n", ""); rv.trim();
   float parsed = rv.toFloat();
   if (parsed > 6.0 && parsed < 20.0) battery_v = parsed;
@@ -289,7 +260,6 @@ void sendToBackend() {
     return;
   }
 
-  // Build JSON payload
   JsonDocument doc;
   doc["rpm"]           = rpm;
   doc["speed"]         = speed_kmh;
@@ -311,35 +281,31 @@ void sendToBackend() {
   String payload;
   serializeJson(doc, payload);
 
-  String path = "/api/iot/data/";
-  path += VEHICLE_ID;
-  path += "?key=";
-  path += API_KEY;
-
   String url = "http://";
-  url += SERVER_HOST;
+  url += SERVER_IP;
   url += ":";
   url += SERVER_PORT;
-  url += path;
+  url += "/api/iot/data/";
+  url += VEHICLE_ID;
+  url += "?key=";
+  url += API_KEY;
 
-  Serial.printf("[HTTP] POST -> %s\n", url.c_str());
+  Serial.printf("[HTTP] POST -> %s\n[HTTP] Payload: %s\n", url.c_str(), payload.c_str());
 
   HTTPClient http;
   http.begin(url);
-  http.setTimeout(8000);
   http.addHeader("Content-Type", "application/json");
   lastHttpCode = http.POST(payload);
-  http.end();
 
-  if (lastHttpCode == 201 || lastHttpCode == 200) {
+  if (lastHttpCode == 201) {
     totalSent++;
-    Serial.printf("[HTTP] SUCCESS (%d) — total sent: %lu\n", lastHttpCode, totalSent);
-    lastHttpCode = 201;
+    Serial.printf("[HTTP] SUCCESS (201) — total sent: %lu\n", totalSent);
     blinkLED(1, 500, 0);
   } else {
     Serial.printf("[HTTP] FAILED — code: %d\n", lastHttpCode);
     blinkLED(5, 50, 50);
   }
+  http.end();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -352,31 +318,14 @@ void setup() {
 
   Serial.println("\n====================================");
   Serial.println("   ESP32 Master Unit Starting...");
-  Serial.println("   OBD + Alcohol + GPS → Backend");
+  Serial.println("   OBD + Alcohol + GPS -> Backend");
   Serial.println("====================================\n");
 
-  // UART2 for slave data
   SensorSerial.begin(115200, SERIAL_8N1, UART_RX, UART_TX);
   Serial.println("[UART] Slave serial on RX=16, TX=17");
 
-  // WiFi
   connectWiFi();
 
-  // NTP time sync — required for TLS certificate validation
-  Serial.println("[NTP] Syncing time...");
-  configTime(19800, 0, "pool.ntp.org", "time.nist.gov");  // IST = UTC+5:30
-  struct tm t;
-  int ntpTries = 0;
-  while (!getLocalTime(&t) && ntpTries++ < 20) { delay(500); Serial.print("."); }
-  Serial.println();
-  if (ntpTries < 20) {
-    Serial.printf("[NTP] Time synced: %04d-%02d-%02d %02d:%02d:%02d\n",
-      t.tm_year+1900, t.tm_mon+1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
-  } else {
-    Serial.println("[NTP] Sync failed — continuing anyway");
-  }
-
-  // Bluetooth ELM327
   Serial.println("[BT] Starting Bluetooth Master...");
   ELM327.begin("ESP32_Master", true);
   ELM327.setPin("1234", 4);
@@ -407,7 +356,6 @@ void loop() {
     readOBDData();
   }
 
-  // Retry BT on a separate slower interval so it doesn't block the main loop
   if (!elmConnected || !ELM327.connected()) {
     if (millis() - lastBTRetry >= BT_RETRY_INTERVAL) {
       lastBTRetry = millis();
@@ -418,7 +366,7 @@ void loop() {
         Serial.println("[BT] ELM327 reconnected!");
         delay(500); initELM327();
       } else {
-        Serial.println("[BT] ELM327 retry failed — check adapter power and MAC");
+        Serial.println("[BT] ELM327 retry failed");
       }
     }
   }

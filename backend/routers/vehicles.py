@@ -14,7 +14,6 @@ router = APIRouter(prefix="/vehicles", tags=["Vehicles"])
 
 def _row_to_dict(row) -> dict:
     d = dict(row)
-    # Merge extra JSON fields into the response
     try:
         extra = json.loads(d.pop("extra", "{}") or "{}")
     except Exception:
@@ -24,7 +23,15 @@ def _row_to_dict(row) -> dict:
         last_reading = json.loads(lr or "{}")
     except Exception:
         last_reading = {}
-    return {"id": d["id"], **d, **extra, "last_reading": last_reading}
+    return {
+        "id":          d["id"],
+        "vehicle_id":  d["id"],           # frontend checks this to decide live vs static panel
+        "reg":         d.get("registration_number", ""),  # frontend uses v.reg everywhere
+        **d,
+        **extra,
+        **last_reading,                   # flatten latest OBD readings into top-level fields
+        "last_reading": last_reading,
+    }
 
 
 @router.get("/")
