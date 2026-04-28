@@ -22,7 +22,9 @@ function LiveOBDPanel({ vehicleId }) {
     async function fetchLatest() {
       try {
         const base = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-        const res = await fetch(`${base}/api/iot/latest/${vehicleId}`);
+        const res = await fetch(`${base}/api/iot/latest/${vehicleId}`, {
+          headers: { 'ngrok-skip-browser-warning': 'true' },
+        });
         if (!res.ok) { setOnline(false); return; }
         const r = await res.json();
         setObd({

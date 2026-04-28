@@ -36,11 +36,16 @@ function authHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+function baseHeaders() {
+  return { 'ngrok-skip-browser-warning': 'true' };
+}
+
 async function apiFetch(path, options = {}) {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...baseHeaders(),
       ...authHeaders(),
       ...(options.headers || {}),
     },
