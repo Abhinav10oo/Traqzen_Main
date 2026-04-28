@@ -25,6 +25,8 @@ randomfile.md
 telematicshub/.env
 telematicshub/node_modules/
 telematicshub/dist/
+frontend/node_modules/
+frontend/dist/
 
 # ── IDE & Local Tools ─────────────────────────────────────────────────────────
 .vscode/

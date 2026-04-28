@@ -1,0 +1,35 @@
+/* ===== DASHBOARD LAYOUT ===== */
+.dash-layout {
+  min-height: 100vh;
+  background: var(--darker);
+}
+
+.dash-main {
+  padding-top: var(--navbar-height);
+  min-height: 100vh;
+  transition: padding-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dash-layout.sidebar-open .dash-main {
+  padding-left: var(--sidebar-width);
+}
+
+.dash-layout.sidebar-closed .dash-main {
+  padding-left: 0;
+}
+
+.dash-content {
+  padding: 28px 28px 40px;
+  max-width: 1600px;
+  animation: fadeIn 0.3s ease;
+}
+
+@media (max-width: 768px) {
+  .dash-layout.sidebar-open .dash-main,
+  .dash-layout.sidebar-closed .dash-main {
+    padding-left: 0;
+  }
+  .dash-content {
+    padding: 20px 16px 32px;
+  }
+}
