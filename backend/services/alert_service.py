@@ -5,6 +5,7 @@ Called after every sensor reading. Checks thresholds and deduplicates alerts.
 from datetime import datetime, timezone, date
 from core.database import get_db
 from core.config import settings
+from services.sms_service import send_alcohol_alert_sms
 
 
 def _has_open_alert(vehicle_id: str, alert_type: str) -> bool:
@@ -38,6 +39,20 @@ def _create_alert(vehicle_id: str, alert_type: str, severity: str, message: str)
     return True
 
 
+def _send_alcohol_sms(vehicle_id: str, alcohol_level: int):
+    conn = get_db()
+    try:
+        row = conn.execute(
+            """SELECT u.phone FROM vehicles v
+               JOIN users u ON u.id = v.owner_uid
+               WHERE v.id = ?""", (vehicle_id,)
+        ).fetchone()
+        if row and row["phone"]:
+            send_alcohol_alert_sms(vehicle_id, alcohol_level, row["phone"])
+    finally:
+        conn.close()
+
+
 def check_and_create_alerts(vehicle_id: str, reading: dict):
     fuel = reading.get("fuel")
     if fuel is not None and fuel < settings.FUEL_ALERT_THRESHOLD:
@@ -65,11 +80,15 @@ def check_and_create_alerts(vehicle_id: str, reading: dict):
 
     alcohol = reading.get("alcohol_level")
     if alcohol == 3:
-        _create_alert(vehicle_id, "alcohol_high", "danger",
+        created = _create_alert(vehicle_id, "alcohol_high", "danger",
                       f"HIGH alcohol detected (level {alcohol}/3) — driver may be impaired!")
+        if created:
+            _send_alcohol_sms(vehicle_id, alcohol)
     elif alcohol == 2:
-        _create_alert(vehicle_id, "alcohol_moderate", "warning",
+        created = _create_alert(vehicle_id, "alcohol_moderate", "warning",
                       f"Moderate alcohol detected (level {alcohol}/3) — verify driver condition")
+        if created:
+            _send_alcohol_sms(vehicle_id, alcohol)
 
 
 def check_document_expiry_alerts():

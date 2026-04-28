@@ -9,10 +9,10 @@
  *   JSON via UART2 (TX=17) to Master ESP32 every 1 second
  *
  * Alcohol Levels:
- *   0 = Sober    (raw < 1500)  — clean air baseline ~1200-1300
- *   1 = Trace    (1500–2199)
- *   2 = Moderate (2200–2999)   → triggers alert on dashboard
- *   3 = High     (≥ 3000)      → triggers alert on dashboard
+ *   0 = Sober    (raw < 1000)  — clean air baseline
+ *   1 = Trace    (1000–1399)
+ *   2 = Moderate (1400–1899)   → triggers alert on dashboard
+ *   3 = High     (≥ 1900)      → triggers alert on dashboard
  *
  * Board      : ESP32 Dev Module
  * Baud       : 115200
@@ -65,9 +65,9 @@ unsigned long lastSend = 0;
 // Allow the sensor to warm up for 2–3 minutes before readings stabilise.
 // ─────────────────────────────────────────────────────────────────────────────
 int getAlcoholLevel(int raw) {
-  if (raw < 1500) return 0;   // Sober    — clean air baseline ~1200-1300
-  if (raw < 2200) return 1;   // Trace    — slight alcohol presence
-  if (raw < 3000) return 2;   // Moderate — caution, verify driver
+  if (raw < 1000) return 0;   // Sober    — clean air baseline
+  if (raw < 1400) return 1;   // Trace    — slight alcohol presence
+  if (raw < 1900) return 2;   // Moderate — caution, verify driver
   return 3;                   // High     — danger, impaired
 }
 
