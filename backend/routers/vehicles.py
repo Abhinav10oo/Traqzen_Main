@@ -62,8 +62,8 @@ def list_vehicles(
             if not assigned:
                 return []
             rows = conn.execute(
-                "SELECT * FROM vehicles WHERE id = ? OR driver_uid = ?",
-                (assigned, uid),
+                "SELECT * FROM vehicles WHERE id = ? OR registration_number = ? OR driver_uid = ?",
+                (assigned, assigned, uid),
             ).fetchall()
     finally:
         conn.close()
