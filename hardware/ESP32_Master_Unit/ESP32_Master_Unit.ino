@@ -46,7 +46,7 @@ const char* PASS = "qwert93354";
 // ── Backend ───────────────────────────────────────────────────────────────────
 // Run  ipconfig  on your laptop while connected to the Redmi hotspot
 // and set this to the "Wireless LAN IPv4 Address" you see.
-const char* SERVER_IP  = "192.168.136.83";  // <- your PC's IP on Redmi hotspot
+const char* SERVER_IP  = "192.168.157.83";  // <- your PC's IP on Redmi hotspot
 const int   SERVER_PORT = 8000;
 const char* VEHICLE_ID  = "mritunjay";
 const char* API_KEY     = "OBD2_ESP32_KEY";

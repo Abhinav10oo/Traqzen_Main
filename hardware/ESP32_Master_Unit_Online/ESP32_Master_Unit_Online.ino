@@ -45,7 +45,7 @@
 
 // ── WiFi ──────────────────────────────────────────────────────────────────────
 const char* SSID = "Redmi_Note_8_Pro";
-const char* PASS = "qwert93354";
+const char* PASS = "";
 
 // ── Backend (ngrok — works on any network) ────────────────────────────────────
 const char* SERVER_URL = "https://those-squirt-smartness.ngrok-free.dev";
@@ -141,7 +141,8 @@ void printStatus() {
 void connectWiFi() {
   Serial.printf("[WiFi] Connecting to: %s\n", SSID);
   WiFi.mode(WIFI_STA);
-  WiFi.begin(SSID, PASS);
+  if (strlen(PASS) > 0) WiFi.begin(SSID, PASS);
+  else                  WiFi.begin(SSID);
   int tries = 0;
   while (WiFi.status() != WL_CONNECTED && tries++ < 20) {
     delay(500);
